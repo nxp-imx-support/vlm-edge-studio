@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+
+set -e
+
+export WAYLAND_DISPLAY=wayland-0
+export XDG_RUNTIME_DIR=/run/user/0
+export QT_IM_MODULE=openvirtualkeyboard
+export QT_MESSAGE_PATTERN="[%{time hh:mm:ss.zzz}] [%{type}] [%{category}]-> %{message}"
+export SERVICE="eiq-aaf-connector.service"
+
+# Paths
+CONNECTOR_LOG="/tmp/connector.log"
+CONNECTOR_PID_FILE="/tmp/connector.pid"
+
+# Cleanup function
+cleanup() {
+    if [ -f "$CONNECTOR_PID_FILE" ]; then
+        kill $(cat "$CONNECTOR_PID_FILE") 2>/dev/null || true
+        rm -f "$CONNECTOR_PID_FILE"
+    fi
+}
+trap cleanup EXIT INT TERM
+
+# Stop the service if it's running
+if systemctl is-active --quiet ${SERVICE}; then
+    echo "Stopping eiq-aaf-connector service"
+    systemctl stop eiq-aaf-connector.service
+fi
+
+# Start connector if not running
+if ! pgrep -f "aaf-connector --host" > /dev/null; then
+    echo "Starting aaf connector..."
+    > "$CONNECTOR_LOG"
+    
+    nohup bash -c "
+        exec aaf-connector --host 0.0.0.0 --port 8000  --config /usr/share/vlm-edge-studio/server_config.json
+    " > "$CONNECTOR_LOG" 2>&1 &
+    
+    echo $! > "$CONNECTOR_PID_FILE"
+    
+    # Wait for "Uvicorn running" message
+    timeout=600
+    elapsed=0
+    while [ $elapsed -lt $timeout ]; do
+        if grep -q "Uvicorn running on" "$CONNECTOR_LOG" 2>/dev/null; then
+            echo "Connector ready!"
+            break
+        fi
+        echo -n "."
+        sleep 1
+        elapsed=$((elapsed + 1))
+    done
+    
+    if [ $elapsed -ge $timeout ]; then
+        echo "ERROR: Connector startup timeout"
+        tail -n 30 "$CONNECTOR_LOG"
+        exit 1
+    fi
+else
+    echo "Connector already running"
+fi
+
+# Launch Qt app
+cd /usr/share/vlm-edge-studio
+exec ./vlm_edge_studio

@@ -1,0 +1,5 @@
+build/
+*.user
+.vscode/
+*.deb
+vlm-edge-studio/usr/share/vlm-edge-studio/vlm_edge_studio

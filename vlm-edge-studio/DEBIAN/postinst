@@ -1,0 +1,387 @@
+#!/usr/bin/env bash
+# postinst script for vlm-edge-studio
+# Copyright 2025-2026 NXP
+
+set -e
+
+# ============================================================================
+# Color Definitions
+# ============================================================================
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[38;5;117m'
+MAGENTA='\033[0;35m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+RESET='\033[0m'
+
+CHECK="✓"
+CROSS="✗"
+ARROW="→"
+WARNING="⚠"
+
+# ============================================================================
+# Utility Functions
+# ============================================================================
+_strip_ansi() {
+	sed -E 's/\x1B\[[0-9;]*[[:alpha:]]//g'
+}
+
+_repeat_unit() {
+	local __var="$1" __count="$2" __unit="$3"
+	if (( __count <= 0 )); then
+		printf -v "$__var" "%s" ""
+		return
+	fi
+	local out=""
+	local i
+	for (( i=0; i<__count; i++ )); do
+		out+="$__unit"
+	done
+	printf -v "$__var" "%s" "$out"
+}
+
+_repeat_char() {
+	local __var="$1" __count="$2" __char="$3"
+	if (( __count <= 0 )); then
+		printf -v "$__var" "%s" ""
+		return
+	fi
+	local spaces
+	printf -v spaces "%*s" "$__count" ""
+	local ch="${__char:0:1}"
+	local val
+	val=$(printf "%s" "$spaces" | LC_ALL=C tr ' ' "$ch")
+	printf -v "$__var" "%s" "$val"
+}
+
+_center_visible() {
+	local text="$1" width="$2" pad="${3:- }"
+	local vis stripped total_pad left right L R
+	stripped="$(printf "%s" "$text" | _strip_ansi)"
+	vis="${#stripped}"
+
+	(( vis < 0 )) && vis=0
+	(( width < vis )) && width="$vis"
+
+	total_pad=$(( width - vis ))
+	(( total_pad < 0 )) && total_pad=0
+
+	left=$(( total_pad / 2 ))
+	right=$(( total_pad - left ))
+
+	_repeat_char L "$left" "$pad"
+	_repeat_char R "$right" "$pad"
+
+	echo -e -n "$L" "${BOLD}${text}${RESET}" "$R"
+}
+
+header() {
+	local title="$1"
+	local min_width="80"
+	local border_pad="═"
+
+	if ! [[ "$min_width" =~ ^[0-9]+$ ]]; then
+		printf "header: MIN_WIDTH must be an integer (got: %s)\n" "$min_width" >&2
+		return 2
+	fi
+
+	local content
+	content="${title}"
+
+	local stripped visible inner_target outer_target
+	stripped="$(printf "%s" "$content" | _strip_ansi)"
+	visible="${#stripped}"
+
+	outer_target=$(( visible + 2 + 2 ))
+	if (( outer_target < min_width )); then
+		outer_target="$min_width"
+	fi
+
+	local inner_width=$(( outer_target - 2 ))
+	(( inner_width < 0 )) && inner_width=0
+
+	local horiz
+	_repeat_unit horiz "$inner_width" "$border_pad"
+
+	printf "\n"
+	echo -e "${BOLD}${CYAN}╔""$horiz""╗${RESET}"
+	echo -e -n "${BOLD}${CYAN}║${RESET} "
+
+	local content_area=$(( inner_width - 4 ))
+	(( content_area < 0 )) && content_area=0
+
+	_center_visible "${content}" "$content_area" " "
+
+	echo -e " ${BOLD}${CYAN}║${RESET}"
+	echo -e "${BOLD}${CYAN}╚""$horiz""╝${RESET}"
+	printf "\n"
+}
+
+section() {
+	echo -e "\n${BOLD}${BLUE}${ARROW} $1${RESET}"
+	local sec
+	_repeat_unit sec 80 "─"
+	echo -e "${BLUE}${sec}${RESET}"
+}
+
+success() {
+	echo -e " ${GREEN}${CHECK}${RESET} $1"
+}
+
+error() {
+	echo -e " ${RED}${CROSS}${RESET} $1" >&2
+}
+
+info() {
+	echo -e "  $1"
+}
+
+warning() {
+	echo -e " ${YELLOW}${WARNING}${RESET} $1"
+}
+
+# ============================================================================
+# Configuration Variables
+# ============================================================================
+
+readonly PACKAGE_NAME="vlm-edge-studio"
+readonly PACKAGE_VERSION="1.0.0"
+readonly DEMO_EXEC="run_vlm_edge_studio"
+readonly INSTALL_PATH="/usr/share/vlm-edge-studio/scripts"
+readonly DEMO_PATH="$INSTALL_PATH/$DEMO_EXEC"
+readonly SYMLINK_PATH="/usr/bin/$DEMO_EXEC"
+readonly MODEL_PATH="/usr/share/llm"
+readonly CONNECTOR_VENV="/usr/share/eiq/aaf-connector/venv"
+readonly LIBARACLIENT_PATH="/usr/lib/libaraclient_aarch64.so"
+readonly FETCH_MODELS_SCRIPT="uvx --from /usr/share/python-wheels/fetch_models-1.0.0-py3-none-any.whl fetch_models"
+
+# Define models to check (add more as needed)
+readonly MODELS=(
+	"nxp/Qwen2.5-VL-7B-Instruct-Ara240"
+)
+
+# ============================================================================
+# Error Handler
+# ============================================================================
+
+cleanup_on_error() {
+	local exit_code=$?
+	if [ $exit_code -ne 0 ]; then
+		error "Installation failed with exit code: ${exit_code}"
+		info "Please check the error messages above and resolve before retrying"
+	fi
+}
+
+trap cleanup_on_error ERR EXIT
+
+# ============================================================================
+# Validation Functions
+# ============================================================================
+
+validate_package_dependency() {
+	local package_name="$1"
+	
+	if dpkg-query -W -f='${Status}' "$package_name" 2>/dev/null | grep -q "install ok installed"; then
+		success "Dependency '${package_name}' is installed"
+		return 0
+	else
+		error "Required dependency '${package_name}' is NOT installed"
+		info "Install with: dpkg -i ${package_name}.deb"
+		return 1
+	fi
+}
+
+validate_file_exists() {
+	local file_path="$1"
+	local description="$2"
+	
+	if [ -f "$file_path" ]; then
+		success "Found ${description}: ${file_path}"
+		return 0
+	else
+		error "${description} not found: ${file_path}"
+		return 1
+	fi
+}
+
+validate_directory_exists() {
+	local dir_path="$1"
+	local description="$2"
+	
+	if [ -d "$dir_path" ]; then
+		success "Found ${description}: ${dir_path}"
+		return 0
+	else
+		error "${description} not found: ${dir_path}"
+		return 1
+	fi
+}
+
+# ============================================================================
+# Fetch Models Function
+# ============================================================================
+
+fetch_models() {
+	# Create virtual environment using uv
+	info "Creating virtual environment..."
+	if ! uv venv; then
+		error "Failed to create virtual environment with uv"
+		exit 1
+	fi
+	success "Virtual environment created"
+	
+	# Install huggingface_hub
+	info "Installing huggingface_hub..."
+	if ! uv pip install huggingface_hub; then
+		error "Failed to install huggingface_hub"
+		exit 1
+	fi
+	success "huggingface_hub installed"
+	
+	# Download each model
+	for model in "${MODELS[@]}"; do
+		info "Downloading model: ${YELLOW}${model}${RESET}"
+		if ! ${FETCH_MODELS_SCRIPT} --repo-id "${model}"; then
+			error "Failed to download model: ${model}"
+			warning "You can manually download it later using:"
+			info "  uv run $FETCH_MODELS_SCRIPT --repo-id $model"
+			# Don't exit, continue with other models
+		else
+			success "Downloaded: ${model}"
+		fi
+	done
+}
+
+# ============================================================================
+# Main Installation Logic
+# ============================================================================
+
+main() {
+	local validation_failed=false
+	
+	# Display header
+	header "${PACKAGE_NAME} v${PACKAGE_VERSION} - Installation"
+	
+	# ========================================================================
+	# Step 1: Validate Dependencies
+	# ========================================================================
+
+	section "Validating critical libraries and dependencies"
+	
+	if ! validate_package_dependency "rt-sdk-ara2"; then
+		validation_failed=true
+	fi
+	
+	if ! validate_file_exists "$LIBARACLIENT_PATH" "required library"; then
+		info "This library is provided by the rt-sdk-ara2 package"
+		validation_failed=true
+	fi
+	
+	if [ "$validation_failed" = true ]; then
+		echo ""
+		error "Missing critical dependencies required for installation"
+		error "Installation cannot continue"
+		echo ""
+		info "Required library: ${LIBARACLIENT_PATH}"
+		info "Please install rt-sdk-ara2 package to resolve these dependencies"
+		echo ""
+		info "Run: ${YELLOW}dpkg -i rt-sdk-ara2.deb${RESET}"
+		echo ""
+		exit 1
+	fi
+	
+	echo ""
+	
+	# ========================================================================
+	# Step 2: Validate Python Virtual Environments
+	# ========================================================================
+
+	section "Validating Python virtual environments"
+	
+	if ! validate_directory_exists "$CONNECTOR_VENV" "Connector virtual environment"; then
+		error "Please make sure you have installed the rt-sdk-ara2.deb with eIQ AAF Connector"
+		exit 1
+	fi
+	
+	# ========================================================================
+	# Step 3: Validate and Install Demo Script
+	# ========================================================================
+
+	section "Setting up demo executable"
+	
+	if ! validate_file_exists "$DEMO_PATH" "demo script"; then
+		exit 1
+	fi
+	
+	chmod 755 "$DEMO_PATH" || {
+		error "Failed to set permissions on ${DEMO_PATH}"
+		exit 1
+	}
+	success "Set executable permissions on ${DEMO_EXEC}"
+
+	# Remove old symlink if it exists
+	if [ -L "$SYMLINK_PATH" ]; then
+ 		rm -f "$SYMLINK_PATH" || {
+  	    	warning "Failed to remove old symlink: ${SYMLINK_PATH}"
+   		}
+	fi
+
+	# ========================================================================
+	# Step 4: Create new symlink
+	# ========================================================================
+
+	ln -sf "$DEMO_PATH" "$SYMLINK_PATH" || {
+		error "Failed to create symlink: ${SYMLINK_PATH} -> ${DEMO_PATH}"
+		warning "You can manually run: ${DEMO_PATH}"
+		# Don't exit - this is not critical
+	}
+
+	if [ -L "$SYMLINK_PATH" ]; then
+		success "Created executable link: ${SYMLINK_PATH}"
+		info "You can now run: ${DEMO_EXEC}"
+	else
+		warning "Symlink creation may have failed"
+		info "Run directly: ${DEMO_PATH}"
+	fi
+
+	# ========================================================================
+	# Step 5: Fetch Models
+	# ========================================================================
+	section "Fetching models from Hugging Face Hub"
+	fetch_models
+	
+	# ========================================================================
+	# Installation Complete
+	# ========================================================================
+
+	header "Installation completed successfully!"
+	echo ""
+	success "Package ${BOLD}${PACKAGE_NAME}${RESET} installed successfully"
+	info "Run with: ${YELLOW}${DEMO_EXEC}${RESET}"
+	echo ""
+}
+
+# ============================================================================
+# Execute Main Function
+# ============================================================================
+
+case "$1" in
+	configure|reconfigure)
+		trap cleanup_on_error ERR EXIT
+		main "$@"
+		trap - EXIT
+		;;
+	abort-upgrade|abort-remove|abort-deconfigure)
+		exit 0
+		;;
+	*)
+		echo "postinst called with unknown argument \`$1'" >&2
+		exit 1
+		;;
+esac
+
+#DEBHELPER#
+
+exit 0
