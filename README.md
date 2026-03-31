@@ -74,7 +74,7 @@ graph LR
 | Platform                                                                                                    | Supported |
 | ----------------------------------------------------------------------------------------------------------- | :-------: |
 | [FRDM i.MX 8M Plus](https://www.nxp.com/design/design-center/development-boards-and-designs/FRDM-IMX8MPLUS) |     ✅     |
-| FRDM i.MX 95                                                                                                |     ✅     |
+| [FRDM i.MX 95](https://www.nxp.com/design/design-center/development-boards-and-designs/FRDM-IMX95)          |     ✅     |
 
 ## 📋 Requirements
 
@@ -101,11 +101,13 @@ graph LR
 
 ## 🧠 Currently supported VLMs
 
-| **Model**           | **Params (billion)** | **TTFT (s)** | **TPS** | **Model Card**                                                                            | **License**                                                                             |
+| **Model**           | **Params (billion)** | **TTFT (s)** | **Avg. Token rate (Tokens/seconds)** | **Model Card**                                                                            | **License**                                                                             |
 | ------------------- | -------------------- | ------------ | ------- | ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| Qwen2.5-VL-7B  | 7B                 | 9.26          | 6.2     | [nxp/Qwen2.5-VL-7B-Instruct-Ara240](https://huggingface.co/nxp/Qwen2.5-VL-7B-Instruct-Ara240) | [Apache-2.0]() |
+| Qwen2.5-VL-7B  | 7B                 | 1 - 14.26         | 6.255     | [nxp/Qwen2.5-VL-7B-Instruct-Ara240](https://huggingface.co/nxp/Qwen2.5-VL-7B-Instruct-Ara240) | [Apache-2.0](https://huggingface.co/nxp/Qwen2.5-VL-7B-Instruct-Ara240/blob/main/LICENSE) |
 
-> **Note:** **TTFT** stands for _Time to First Token_ and its unit is seconds. **TPS** stands for _Tokens per Second_.
+> **Note:**\
+> **TTFT:** - Time to first token (TTFT). Reported as a range: the lower bound corresponds to prompts up to 128 tokens, and the upper bound reflects prompts at maximum context length.\
+> **Avg. Token Rate:** Average token rate over the context length.
 
 ## ⚙️ Build `vlm-edge-studio.deb` package
 
