@@ -1767,40 +1767,41 @@ Window {
                             easing.type: Easing.InOutQuad
                         }
                     }
-
                     // Traveling light effect
                     Rectangle {
-                        width: 60
+                        id: shimmer
+                        width: mainProgress.width < 60 ? mainProgress.width+1 : 60
                         height: parent.height
-                        radius: 10
+                        radius: 40
+                        x: 0
 
                         gradient: Gradient {
                             orientation: Gradient.Horizontal
                             GradientStop {
-                                position: 0.0
+                                position: 0.1
                                 color: "#00FFFFFF"
                             }
                             GradientStop {
-                                position: 0.3
+                                position: 0.45
                                 color: "#80FFFFFF"
                             }
                             GradientStop {
-                                position: 0.7
+                                position: 0.55
                                 color: "#80FFFFFF"
                             }
                             GradientStop {
-                                position: 1.0
+                                position: 0.9
                                 color: "#00FFFFFF"
                             }
                         }
 
                         SequentialAnimation on x {
                             running: progressBarModel.visible
-                                     && mainProgress.width > 0
+                                     && mainProgress.width >= 60
                             loops: Animation.Infinite
                             NumberAnimation {
                                 from: 0
-                                to: mainProgress.width
+                                to: mainProgress.width - shimmer.width 
                                 duration: 1500
                                 easing.type: Easing.InOutQuad
                             }

@@ -306,7 +306,7 @@ void SubmitPrompt::loadDefaultModel() {
     m_availableModelNames << QStringLiteral("Qwen 2.5 VL 7B Instruct (Fallback)");
 
     AAFConnector::ModelInfo fallbackModel;
-    fallbackModel.name = QStringLiteral("Qwen2.5-vl-7B-Instruct");
+    fallbackModel.name = QStringLiteral("Qwen2.5-VL-7B-Instruct");
     fallbackModel.description = QStringLiteral("Qwen2.5-VL 7B instance with vision and language capabilities.");
     fallbackModel.type = QStringLiteral("qwen_vl_video");
     fallbackModel.enabled = true;
