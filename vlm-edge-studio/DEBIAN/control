@@ -4,7 +4,7 @@ Section: utils
 Priority: optional
 Maintainer: NXP
 Architecture: arm64
-Depends: rt-sdk-ara2
+Depends: imx-nxp-ara2
 Description: VLM Edge Studio - Vision Language Model Application
   Features:
     - Supported SoC: i.MX 8M Plus FRDM, i.MX 95 FRDM

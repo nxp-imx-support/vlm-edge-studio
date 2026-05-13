@@ -12,7 +12,6 @@
 
 #include "submitprompt.h"
 #include <QLoggingCategory>
-#include <QProcess>
 #include <QRegularExpression>
 
 Q_LOGGING_CATEGORY(lcSubmitPrompt, "submit.prompt")
@@ -48,8 +47,16 @@ SubmitPrompt::SubmitPrompt(QObject *parent)
     , m_modelLoadingProgress(0)
     , m_isLoadingModelList(true)
     , m_isLoadingModelListError()
+    , m_isDownloadingModels(false)
+    , m_downloadProgress(0)
+    , m_hasDownloadError(false)
+    , m_downloadProcess(nullptr)
+    , m_currentDownloadIndex(0)
     , m_aafConnector(new AAFConnector(this)) // Qt parent-child ownership
 {
+    m_modelsToDownload = QStringList()
+      << "nxp/Qwen2.5-VL-7B-Instruct-Ara240";
+
     // Connect model list signals
     connect(m_aafConnector, &AAFConnector::modelsListReceived,
             this, &SubmitPrompt::handleModelListReceived);
@@ -295,29 +302,14 @@ void SubmitPrompt::handleModelListError(const QString& error) {
     Q_EMIT isLoadingModelListChanged();
     Q_EMIT isLoadingModelListErrorChanged();
 
-    // Fallback model
+    // Try to fetch a model
     loadDefaultModel();
 }
 
 void SubmitPrompt::loadDefaultModel() {
-    qCDebug(lcSubmitPrompt) << "Loading fallback model";
-
-    m_availableModelNames.clear();
-    m_availableModelNames << QStringLiteral("Qwen 2.5 VL 7B Instruct (Fallback)");
-
-    AAFConnector::ModelInfo fallbackModel;
-    fallbackModel.name = QStringLiteral("Qwen2.5-VL-7B-Instruct");
-    fallbackModel.description = QStringLiteral("Qwen2.5-VL 7B instance with vision and language capabilities.");
-    fallbackModel.type = QStringLiteral("qwen_vl_video");
-    fallbackModel.enabled = true;
-    fallbackModel.supportsVideo = true;
-    fallbackModel.supportsImage = true;
-
+    qCDebug(lcSubmitPrompt) << "No models available - user can download manually";
     m_availableModels.clear();
-    m_availableModels.append(fallbackModel);
-
     Q_EMIT availableModelsChanged();
-    setCurrentModelIndex(0);
 }
 
 QString SubmitPrompt::formatModelName(const QString& modelName) const {

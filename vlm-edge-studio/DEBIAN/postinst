@@ -270,7 +270,7 @@ main() {
 
 	section "Validating critical libraries and dependencies"
 	
-	if ! validate_package_dependency "rt-sdk-ara2"; then
+	if ! validate_package_dependency "imx-nxp-ara2"; then
 		validation_failed=true
 	fi
 	

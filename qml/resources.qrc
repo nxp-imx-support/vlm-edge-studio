@@ -2,6 +2,7 @@
     <qresource prefix="/">
         <file>main.qml</file>
         <file>AboutDialog.qml</file>
+        <file>ModelDownloadDialog.qml</file>
         <file>../images/about.png</file>
         <file>../images/about_pressed.png</file>
         <file>../images/camera.svg</file>

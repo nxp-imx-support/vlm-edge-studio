@@ -15,6 +15,7 @@
 
 #include <QList>
 #include <QObject>
+#include <QProcess>
 #include <QString>
 #include <QStringList>
 #include "aafconnector.h"
@@ -99,6 +100,12 @@ class SubmitPrompt : public QObject {
     Q_PROPERTY(QString activeEndpoint READ activeEndpoint WRITE setActiveEndpoint
                NOTIFY activeEndpointChanged FINAL)
 
+    // Auto-fetch Model Properties
+    Q_PROPERTY(bool isDownloadingModels READ isDownloadingModels NOTIFY isDownloadingModelsChanged)
+    Q_PROPERTY(int downloadProgress READ downloadProgress NOTIFY downloadProgressChanged)
+    Q_PROPERTY(QString downloadStatus READ downloadStatus NOTIFY downloadStatusChanged)
+    Q_PROPERTY(bool hasDownloadError READ hasDownloadError NOTIFY hasDownloadErrorChanged)
+
 public:
     explicit SubmitPrompt(QObject* parent = nullptr);
     ~SubmitPrompt() override;
@@ -115,6 +122,10 @@ public:
     Q_INVOKABLE QStringList availableModelNames() const;
     Q_INVOKABLE void clearOutputDisplay();
     Q_INVOKABLE void killConnectorProcess();
+    //Q_INVOKABLE QStringList getAvailableModels() const;
+    Q_INVOKABLE void downloadMissingModels();
+    Q_INVOKABLE void cancelDownload();
+    Q_INVOKABLE void refreshModelsList();
 
     // Getters
     QString userPromptText() const { return m_userPromptText; }
@@ -143,6 +154,15 @@ public:
 
     bool modelSupportsImage() const;
     bool modelSupportsVideo() const;
+
+    //bool isDownloadingModels() const;
+    //int downloadProgress() const;
+    //QString downloadStatus() const;
+    //bool hasDownloadError() const;
+    bool isDownloadingModels() const { return m_isDownloadingModels; }
+    int downloadProgress() const { return m_downloadProgress; }
+    QString downloadStatus() const { return m_downloadStatus; }
+    bool hasDownloadError() const {return m_hasDownloadError; }
 
 Q_SIGNALS:
     // Input/Output signals
@@ -175,6 +195,12 @@ Q_SIGNALS:
     // Configuration signals
     void activeEndpointChanged();
 
+    void isDownloadingModelsChanged();
+    void downloadProgressChanged();
+    void downloadStatusChanged();
+    void hasDownloadErrorChanged();
+    void modelDownloadCompleted();
+
 public Q_SLOTS:
     // Setters
     void setUserPromptText(const QString& prompt);
@@ -202,6 +228,10 @@ public Q_SLOTS:
     // Recording handler
     void handleRecordingComplete(const QString& videoPath);
 
+    void handleDownloadFinished(int exitCode, QProcess::ExitStatus exitStatus);
+    void handleDownloadError(QProcess::ProcessError error);
+    void handleDownloadOutput();
+
 private:
     // Helper methods
     void resetToDefault();
@@ -212,6 +242,12 @@ private:
 
     void setModelResponseText(const QString& text);
     void setInferenceMetrics(const QString& metrics);
+
+    void setHasDownloadError(const bool &error);
+    void setIsDownloadingModels(const bool downloading);
+    void setDownloadProgress(const int);
+    void setDownloadStatus(const QString &status);
+    void downloadNextModel();
 
     // Input/Output state
     QString m_userPromptText;
@@ -243,6 +279,14 @@ private:
 
     // Constants
     static constexpr int m_modelLoadingDuration = 476000; // 476 seconds (~7.9 min)
+
+    bool m_isDownloadingModels;
+    int m_downloadProgress;
+    QString m_downloadStatus;
+    bool m_hasDownloadError;
+    QProcess *m_downloadProcess;
+    QStringList m_modelsToDownload;
+    int m_currentDownloadIndex;
 
     // Backend connector
     AAFConnector* m_aafConnector;
