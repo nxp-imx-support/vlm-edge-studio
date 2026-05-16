@@ -32,8 +32,6 @@ if ! pgrep -f "aaf-connector --host" > /dev/null; then
     echo "Starting aaf connector..."
     > "$CONNECTOR_LOG"
     
-    echo "Coping vlm server_config.json to aaf connector..."
-    cp /usr/share/eiq/aaf_connector/server_config.json  /usr/share/eiq/aaf-connector
     nohup bash -c "
         exec aaf-connector --host 0.0.0.0 --port 8000" > "$CONNECTOR_LOG" 2>&1 &
     
