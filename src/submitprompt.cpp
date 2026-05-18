@@ -510,3 +510,234 @@ bool SubmitPrompt::isModelIndexValid(int index) const {
 void SubmitPrompt::killConnectorProcess() {
     QProcess::execute("pkill", QStringList() << "connector");
 }
+
+// ============================================================================
+// Fetch Models Methods
+// ============================================================================
+
+void SubmitPrompt::downloadMissingModels() {
+  if (m_isDownloadingModels) {
+    qCWarning(lcSubmitPrompt) << "Download already in progress";
+    return;
+  }
+
+  qCDebug(lcSubmitPrompt) << "Starting manual model download...";
+
+  // Reset state
+  m_currentDownloadIndex = 0;
+  setHasDownloadError(false);
+  setIsDownloadingModels(true);
+  setDownloadProgress(0);
+
+  // Start downloading the first model
+  downloadNextModel();
+}
+
+void SubmitPrompt::downloadNextModel() {
+  // Check if all models are downloaded
+  if (m_currentDownloadIndex >= m_modelsToDownload.size()) {
+    qCDebug(lcSubmitPrompt) << "All models downloaded successfully";
+    setDownloadStatus("All models downloaded successfully!");
+    setIsDownloadingModels(false);
+    setDownloadProgress(100);
+
+    // Refresh the models list to pick up newly downloaded models
+    QTimer::singleShot(500, this, &SubmitPrompt::refreshModelsList);
+    Q_EMIT modelDownloadCompleted();
+    return;
+  }
+
+  const QString &modelId = m_modelsToDownload[m_currentDownloadIndex];
+  qCDebug(lcSubmitPrompt) << "Downloading model"
+                          << (m_currentDownloadIndex + 1)
+                          << "of" << m_modelsToDownload.size()
+                          << ":" << modelId;
+
+  setDownloadStatus(QString("Downloading %1 (%2/%3)...")
+                        .arg(modelId)
+                        .arg(m_currentDownloadIndex + 1)
+                        .arg(m_modelsToDownload.size()));
+
+  // Calculate progress based on model index
+  int progressPerModel = 100 / m_modelsToDownload.size();
+  int baseProgress = m_currentDownloadIndex * progressPerModel;
+  setDownloadProgress(baseProgress);
+
+  // Clean up previous process if exists
+  if (m_downloadProcess) {
+    m_downloadProcess->disconnect();
+    m_downloadProcess->deleteLater();
+  }
+
+  // Create new process
+  m_downloadProcess = new QProcess(this);
+
+  // Connect signals
+  connect(m_downloadProcess, &QProcess::readyReadStandardOutput,
+          this, &SubmitPrompt::handleDownloadOutput);
+  connect(m_downloadProcess, &QProcess::readyReadStandardError,
+          this, &SubmitPrompt::handleDownloadOutput);
+  connect(m_downloadProcess, 
+          QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+          this, &SubmitPrompt::handleDownloadFinished);
+  connect(m_downloadProcess, &QProcess::errorOccurred,
+          this, &SubmitPrompt::handleDownloadError);
+
+  // Prepare command: uvx --from /usr/share/python-wheels/fetch_models-1.0.0-py3-none-any.whl fetch_models
+  QString program = "uvx";
+  QStringList arguments;
+  arguments << "--from"
+            << "/usr/share/python-wheels/fetch_models-1.0.0-py3-none-any.whl"
+            << "fetch_models"
+            << "--repo-id" << modelId;
+
+  qCDebug(lcSubmitPrompt) << "Running command:" << program << arguments.join(" ");
+
+  // Start download process
+  m_downloadProcess->start(program, arguments);
+  if (!m_downloadProcess->waitForStarted(5000)) {
+    qCWarning(lcSubmitPrompt) << "Failed to start download process";
+    setDownloadStatus("Failed to start download process");
+    setHasDownloadError(true);
+    setIsDownloadingModels(false);
+  }
+}
+
+void SubmitPrompt::handleDownloadFinished(int exitCode, QProcess::ExitStatus exitStatus) {
+  const QString &modelId = m_modelsToDownload[m_currentDownloadIndex];
+
+  if (exitStatus == QProcess::NormalExit && exitCode == 0) {
+    qCDebug(lcSubmitPrompt) << "Successfully downloaded:" << modelId;
+
+    // Calculate progress
+    int progressPerModel = 100 / m_modelsToDownload.size();
+    int newProgress = (m_currentDownloadIndex + 1) * progressPerModel;
+    setDownloadProgress(newProgress);
+
+    // Move to next model
+    m_currentDownloadIndex++;
+    downloadNextModel();
+  } else {
+    qCWarning(lcSubmitPrompt) << "Failed to download model:" << modelId
+                              << "Exit code:" << exitCode;
+
+    QString errorOutput = m_downloadProcess->readAllStandardError();
+    setDownloadStatus(QString("Failed to download %1: %2")
+                          .arg(modelId)
+                          .arg(errorOutput.isEmpty() ? "Unknown error" : errorOutput));
+    setHasDownloadError(true);
+
+    // Continue with next model (don't stop on error, like postinst)
+    m_currentDownloadIndex++;
+    downloadNextModel();
+  }
+}
+
+void SubmitPrompt::handleDownloadError(QProcess::ProcessError error) {
+  qCWarning(lcSubmitPrompt) << "Download process error:" << error;
+
+  QString errorMsg;
+  switch (error) {
+    case QProcess::FailedToStart:
+      errorMsg = "Failed to start download. Is 'uvx' installed?";
+      break;
+    case QProcess::Crashed:
+      errorMsg = "Download process crashed";
+      break;
+    case QProcess::Timedout:
+      errorMsg = "Download process timed out";
+      break;
+    default:
+      errorMsg = "Download process error occurred";
+      break;
+  }
+
+  setDownloadStatus(errorMsg);
+  setHasDownloadError(true);
+  setIsDownloadingModels(false);
+}
+
+void SubmitPrompt::handleDownloadOutput() {
+  if (!m_downloadProcess) {
+    return;
+  }
+
+  QRegularExpression re(R"(\b(\d{1,3})%\|)");
+  QString output = m_downloadProcess->readAllStandardOutput();
+  QString errorOutput = m_downloadProcess->readAllStandardError();
+
+  if (!output.isEmpty()) {
+    qCDebug(lcSubmitPrompt) << "Download output:" << output.trimmed();
+    QRegularExpressionMatch match = re.match(output);
+    if (match.hasMatch()) {
+      int percent = match.captured(1).toInt();
+      setDownloadProgress(percent);
+    }
+  }
+
+  if (!errorOutput.isEmpty()) {
+    qCDebug(lcSubmitPrompt) << "Download error output:" << errorOutput.trimmed();
+    QRegularExpressionMatch match = re.match(errorOutput);
+    if (match.hasMatch()) {
+      int percent = match.captured(1).toInt();
+      setDownloadProgress(percent);
+    }
+  }
+}
+
+void SubmitPrompt::cancelDownload() {
+  if (!m_isDownloadingModels || !m_downloadProcess) {
+    return;
+  }
+
+  qCDebug(lcSubmitPrompt) << "Cancelling download...";
+
+  m_downloadProcess->kill();
+  m_downloadProcess->waitForFinished(3000);
+
+  setDownloadStatus("Download cancelled by user");
+  setIsDownloadingModels(false);
+  setDownloadProgress(0);
+}
+
+void SubmitPrompt::setIsDownloadingModels(const bool downloading){
+  if (m_isDownloadingModels == downloading) {
+    return;
+  }
+  m_isDownloadingModels = downloading;
+  Q_EMIT isDownloadingModelsChanged();
+}
+
+void SubmitPrompt::setDownloadProgress(const int progress){
+  if (m_downloadProgress == progress) {
+    return;
+  }
+  m_downloadProgress = progress;
+  Q_EMIT downloadProgressChanged();
+}
+
+void SubmitPrompt::setDownloadStatus(const QString &status){
+  if (m_downloadStatus == status) {
+    return;
+  }
+  m_downloadStatus = status;
+  Q_EMIT downloadStatusChanged();
+}
+
+void SubmitPrompt::setHasDownloadError(const bool &error){
+  if (m_hasDownloadError == error) {
+    return;
+  }
+  m_hasDownloadError = error;
+  Q_EMIT hasDownloadErrorChanged();
+}
+
+void SubmitPrompt::refreshModelsList() {
+  if (!m_aafConnector) {
+    qCWarning(lcSubmitPrompt) << "Cannot refresh: AAFConnector is null";
+    return;
+  }
+
+  qCDebug(lcSubmitPrompt) << "Refreshing models list from config...";
+  m_aafConnector->loadModelsFromConfig(AAFConfig::CONFIG_PATH);
+}
