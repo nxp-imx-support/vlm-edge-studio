@@ -3,14 +3,10 @@
         <file>main.qml</file>
         <file>AboutDialog.qml</file>
         <file>ModelDownloadDialog.qml</file>
-        <file>../images/about.png</file>
-        <file>../images/about_pressed.png</file>
         <file>../images/camera.svg</file>
         <file>../images/cancel.png</file>
         <file>../images/capture_pressed.svg</file>
         <file>../images/capture_unpressed.svg</file>
-        <file>../images/close.png</file>
-        <file>../images/close_pressed.png</file>
         <file>../images/load_pressed.svg</file>
         <file>../images/load_unpressed.svg</file>
         <file>../images/image.svg</file>

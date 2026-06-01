@@ -17,148 +17,141 @@ import QtQuick.Window
 import QtQuick.Layouts
 
 Window {
-    id: aboutWindow
-    width: 1920
-    height: 1080
+    id: root
+
+    // Window configuration
+    width: screenWidth
+    height: screenHeight
     visible: false
     flags: Qt.Dialog | Qt.FramelessWindowHint
     modality: Qt.ApplicationModal
     color: "transparent"
 
-    function center() {
-        x = (1920 - width) / 2
-        y = (1080 - height) / 2
-    }
+    // Constants
+    readonly property int screenWidth: 1920
+    readonly property int screenHeight: 1080
+    readonly property int dialogWidth: 720
+    readonly property int dialogHeight: 320
 
-    // Center on screen when shown
-    onVisibleChanged: {
-        if (visible) {
-            Qt.callLater(center)
-        }
-    }
+    // Theme colors
+    readonly property color backgroundColor: "#262626"
+    readonly property color borderColor: "#0eafe0"
+    readonly property color textColor: "#ffffff"
+    readonly property color buttonColor: "#EBE7DD"
 
-    Component.onCompleted: {
-        if (visible) {
-            Qt.callLater(center)
-        }
-    }
+    // Spacing constants
+    readonly property int outerMargin: 25
+    readonly property int innerMargin: 10
+    readonly property int sectionSpacing: 15
+    readonly property int borderRadius: 30
+    readonly property int buttonRadius: 15
 
+    // Typography
+    readonly property string fontFamily: "Poppins"
+    readonly property int titleSize: 24
+    readonly property int headerSize: 18
+    readonly property int bodySize: 11
+
+    // Center window on screen using property bindings (Design Studio friendly)
+    x: (screenWidth - width) / 2
+    y: (screenHeight - height) / 2
+
+    // Background rectangle (dialog box)
     Rectangle {
-        id: rectangle
-        width: 720
-        height: 385
-        color: "#262626"
-        radius: 30
-        border.color: "#0eafe0"
-        border.width: 2
+        id: dialogBackground
+        width: dialogWidth
+        height: dialogHeight
         anchors.centerIn: parent
+        color: backgroundColor
+        radius: borderRadius
+        border.color: borderColor
+        border.width: 2
 
-        Text {
-            id: title
-            height: 35
-            color: "#ffffff"
-            text: qsTr("VLM Edge Studio v" + Qt.application.version)
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.top: parent.top
-            anchors.leftMargin: 10
-            anchors.rightMargin: 10
-            anchors.topMargin: 25
-            font.pixelSize: 24
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
-            font.styleName: "Bold"
-            font.family: "Poppins"
-        }
+        ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: outerMargin
+            spacing: innerMargin
 
-        Text {
-            id: copyright
-            color: "#ffffff"
-            text: qsTr("Copyright 2024-2026 NXP")
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.top: title.bottom
-            anchors.leftMargin: 10
-            anchors.rightMargin: 10
-            anchors.topMargin: 0
-            font.pixelSize: 18
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
-            font.family: "Poppins"
-        }
-
-        Text {
-            id: license
-            color: "#ffffff"
-            text: qsTr("LA_OPT_NXP_Software_License - Section 2.3 applies")
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.top: copyright.bottom
-            anchors.leftMargin: 10
-            anchors.rightMargin: 10
-            anchors.topMargin: 0
-            font.pixelSize: 18
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
-            font.family: "Poppins"
-        }
-
-        Text {
-            id: qt
-            color: "#ffffff"
-            text: qsTr("Qt libraries under LGPL-3.0-only license")
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.top: license.bottom
-            anchors.leftMargin: 10
-            anchors.rightMargin: 10
-            anchors.topMargin: 10
-            font.pixelSize: 18
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
-            font.family: "Poppins"
-        }
-
-        Text {
-            id: trademarks
-            color: "#ffffff"
-            text: qsTr("Trademarks and Service Marks: There are a number of proprietary logos, service marks, trademarks, slogans and product designations (\"Marks\") found on this Software. By making the Marks available on this Software, NXP is not granting you a license to use them in any fashion. Access to this Software does not confer upon you any license to the Marks under any of NXP or any third party's intellectual property rights.
-
-NXP and the NXP logo are trademarks of NXP B.V. © 2025 NXP B.V.")
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.top: qt.bottom
-            anchors.leftMargin: 45
-            anchors.rightMargin: 45
-            anchors.topMargin: 15
-            font.pixelSize: 11
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
-            wrapMode: Text.WordWrap
-            font.family: "Poppins"
-        }
-
-        Button {
-            id: close_button_about
-            width: 80
-            text: qsTr("CLOSE")
-            anchors.top: trademarks.bottom
-            anchors.bottom: parent.bottom
-            anchors.topMargin: 15
-            anchors.bottomMargin: 25
-            anchors.horizontalCenterOffset: 0
-            font.bold: true
-            font.family: "Poppins"
-            anchors.horizontalCenter: parent.horizontalCenter
-            display: AbstractButton.TextOnly
-
-            background: Rectangle {
-                color: "#EBE7DD" // Blue background
-                radius: 15
+	        // Title
+            Label {
+	            text: qsTr("VLM Edge Studio v" + Qt.application.version)
+                font.family: fontFamily
+                font.pixelSize: titleSize
+                font.styleName: "Bold"
+                color: textColor
+                horizontalAlignment: Text.AlignHCenter
+                Layout.fillWidth: true
             }
-            onClicked: {
-                aboutWindow.visible = false
-                aboutWindow.close()
+
+            // Copyright
+            Label {
+                text: qsTr("Copyright 2025-2026 NXP")
+                font.family: fontFamily
+                font.pixelSize: headerSize
+                color: textColor
+                horizontalAlignment: Text.AlignHCenter
+                Layout.fillWidth: true
+            }
+
+            // License
+            Label {
+    	        text: qsTr("LA_OPT_NXP_Software_License - Section 2.3 applies")
+            	font.family: fontFamily
+                font.pixelSize: headerSize
+                color: textColor
+                horizontalAlignment: Text.AlignHCenter
+                Layout.fillWidth: true
+            }
+
+            // Qt License
+            Label {
+                text: qsTr("Qt libraries under LGPL-3.0-only license")
+                font.family: fontFamily
+                font.pixelSize: headerSize
+                color: textColor
+                horizontalAlignment: Text.AlignHCenter
+                Layout.fillWidth: true
+                Layout.topMargin: innerMargin
+            }
+
+            // Trademarks
+            Label {
+                text: qsTr("Trademarks and Service Marks: There are a number of proprietary logos, service marks, trademarks, slogans and product designations (\"Marks\") found on this Software. By making the Marks available on this Software, NXP is not granting you a license to use them in any fashion. Access to this Software does not confer upon you any license to the Marks under any of NXP or any third party's intellectual property rights.\n\nNXP and the NXP logo are trademarks of NXP B.V. © 2026 NXP B.V.")
+                font.family: fontFamily
+                font.pixelSize: bodySize
+                color: textColor
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.WordWrap
+                Layout.fillWidth: true
+                Layout.leftMargin: 20
+                Layout.rightMargin: 20
+                Layout.topMargin: 5
+            }
+
+            // Close Button
+            Button {
+                text: qsTr("CLOSE")
+                font.family: fontFamily
+                font.bold: true
+                Layout.preferredWidth: 80
+                Layout.preferredHeight: 40
+                Layout.alignment: Qt.AlignHCenter
+                Layout.bottomMargin: 10
+
+                background: Rectangle {
+                    color: buttonColor
+                    radius: buttonRadius
+                    implicitWidth: 80
+                    implicitHeight: 40
+                }
+
+                onClicked: root.close()
+            }
+
+            // Spacer to push button to bottom
+            Item {
+                Layout.fillHeight: true
+                Layout.minimumHeight: 10
             }
         }
     }

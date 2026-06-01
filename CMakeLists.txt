@@ -36,7 +36,7 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
 endif()
 
 # Find Qt6 components
-find_package(Qt6 6.2 REQUIRED COMPONENTS 
+find_package(Qt6 REQUIRED COMPONENTS
     Concurrent
     Core 
     Quick 

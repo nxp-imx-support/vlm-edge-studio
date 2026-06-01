@@ -229,7 +229,7 @@ int main(int argc, char *argv[]) {
 
   // Set application properties
   app.setApplicationName("GStreamer Qt6 GL Video Player");
-  app.setApplicationVersion("1.0.0");
+  app.setApplicationVersion("1.0.1");
   app.setOrganizationName("YourOrganization");
   app.setOrganizationDomain("yourorganization.com");
 

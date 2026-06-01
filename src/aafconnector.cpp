@@ -490,22 +490,55 @@ void AAFConnector::handleMetricsReply()
 
 QString AAFConnector::formatMetrics(const QJsonObject &metrics) const
 {
-    QStringList compact;
-
-    // Compact display
-    if (metrics.contains("llm_average_token_per_second")) {
-        double tps = metrics["llm_average_token_per_second"].toDouble();
-        compact << QString("%1 tok/s").arg(tps, 0, 'f', 1);
-    }
-    if (metrics.contains("llm_first_infer_duration")) {
-        double ttft = metrics["llm_first_infer_duration"].toDouble();
-        compact << QString("TTFT: %1s").arg(ttft, 0, 'f', 2);
-    }
-    if (metrics.contains("generated_token_num")) {
-        compact << QString("%1 tokens").arg(metrics["generated_token_num"].toInt());
+    if (metrics.isEmpty()) {
+        qCDebug(lcConnector) << "metics.empty():" << metrics;
+        return QString();
     }
 
-    return compact.join(" • ");
+    // Metrics are nested under model name: {"model-name": {...}}
+    const QString modelKey = metrics.keys().first();
+    const QJsonObject modelMetrics = metrics[modelKey].toObject();
+
+    if (modelMetrics.isEmpty()) {
+        qCDebug(lcConnector) << "modelMetrics.empty():" << modelMetrics;
+        return QString();
+    }
+
+    QStringList lines;
+    lines.reserve(6);
+
+    // Time to first token (TTFT)
+    if (modelMetrics.contains("llm_first_infer_duration")) {
+        const double ttft = modelMetrics["llm_first_infer_duration"]
+                                .toDouble();  // Already in seconds
+        lines << QStringLiteral("TTFT: %1 s").arg(ttft, 0, 'f', 2);
+    }
+
+    // Tokens per second
+    if (modelMetrics.contains("llm_average_token_per_second")) {
+        const double tps = modelMetrics["llm_average_token_per_second"].toDouble();
+        lines << QStringLiteral("TPS: %1 tok/s").arg(tps, 0, 'f', 1);
+    }
+
+    // Total generation time
+    if (modelMetrics.contains("llm_token_generation_time")) {
+        const double genTime = modelMetrics["llm_token_generation_time"].toDouble();
+        lines << QStringLiteral("Inf. Time: %1 s").arg(genTime, 0, 'f', 1);
+    }
+
+    // Input tokens
+    if (modelMetrics.contains("input_token_num")) {
+        lines << QStringLiteral("Input: %1 tokens")
+                    .arg(modelMetrics["input_token_num"].toInt());
+    }
+
+    // Generated tokens
+    if (modelMetrics.contains("generated_token_num")) {
+        lines << QStringLiteral("Output: %1 tokens")
+                    .arg(modelMetrics["generated_token_num"].toInt());
+    }
+
+    return lines.join(" | ");
 }
 
 void AAFConnector::handleNetworkError(QNetworkReply::NetworkError error)
