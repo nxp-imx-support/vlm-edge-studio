@@ -40,6 +40,7 @@ namespace AAFConfig {
     inline const QString ENDPOINT_CHAT = QStringLiteral("/v1/chat/completions");
     inline const QString ENDPOINT_MODELS = QStringLiteral("/v1/models");
     inline const QString ENDPOINT_METRICS = QStringLiteral("/metrics/");
+    inline const QString ENDPOINT_DEVICES = QStringLiteral("/v1/devices");
 }
 
 class AAFConnector : public QObject
@@ -105,9 +106,12 @@ public:
     // Metrics request
     void requestMetrics(const QString &modelName = QString());
 
+    // Devices
+    void requestDevices();
+
     // Model management
     void loadModelsFromConfig(const QString &configPath);
-    void setModelById(const QString &modelId);
+    void setModelById(const QString &modelId, const int &endpoint);
 
     void cancelRequest();
     bool isProcessing() const { return m_isProcessing; }
@@ -115,7 +119,7 @@ public:
     Q_INVOKABLE void connectToServer();
 
     // Model management
-    void loadModel(const ModelInfo &modelInfo);
+    void loadModel(const ModelInfo &modelInfo, const int &endpoint);
     void removeModel(const QString &modelName);
     void checkModelStatus(const QString &modelName);
 
@@ -128,6 +132,9 @@ Q_SIGNALS:
 
     // Metrics signal - returns formatted string
     void metricsReceived(const QString &metricsText);
+
+    // Devices signals
+    void devicesReceived(const QStringList &endpointNames);
 
     // Status signals
     void connectionEstablished();
@@ -156,6 +163,7 @@ private Q_SLOTS:
     void handleStreamingData();
     void handleMetricsReply();
     void handleModelStatusReply();
+    void handleDevicesReply();
 
 private:
     // Connection management
@@ -183,6 +191,7 @@ private:
 
     // Helper methods
     QNetworkRequest createRequest() const;
+    QNetworkRequest createJsonRequest(const QUrl &url) const;
     QNetworkRequest createMetricsRequest(const QString &modelName) const;
     QString formatMetrics(const QJsonObject &metrics) const;
     QString formatModelName(const QString &modelId) const;

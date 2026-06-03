@@ -111,8 +111,16 @@ SubmitPrompt::SubmitPrompt(QObject *parent)
                 setModelLoaded(false);
             });
 
-    // Initialize connection
+    connect(m_aafConnector, &AAFConnector::devicesReceived,
+            this, [this](const QStringList &names) {
+            qCDebug(lcSubmitPrompt) << "Endpoints populated:" << names;
+            m_endpointNames = names;
+            Q_EMIT endpointNamesChanged();
+            });
+
+    // Initialize connection and fetch devices once
     m_aafConnector->connectToServer();
+    m_aafConnector->requestDevices();
 }
 
 SubmitPrompt::~SubmitPrompt() = default;
@@ -181,7 +189,9 @@ void SubmitPrompt::setCurrentModelIndex(int index) {
     qCDebug(lcSubmitPrompt) << "Switching to model:" << selectedModel.name
                            << "Type:" << selectedModel.type
                            << "Image:" << selectedModel.supportsImage
-                           << "Video:" << selectedModel.supportsVideo;
+                           << "Video:" << selectedModel.supportsVideo
+                           << "Endpoint:" << m_activeEndpoint
+                           << "Device:" << m_endpoint;
 
     clearOutputDisplay();
 
@@ -202,7 +212,7 @@ void SubmitPrompt::setLoadModel(bool load) {
     if (m_shouldLoadModel && !m_isModelLoaded && isModelIndexValid(m_selectedModelIndex)) {
         clearOutputDisplay();
         const auto& selectedModel = m_availableModels[m_selectedModelIndex];
-        m_aafConnector->loadModel(selectedModel);
+        m_aafConnector->loadModel(selectedModel, m_endpoint);
     }
 
     Q_EMIT shouldLoadModelChanged();
@@ -310,30 +320,6 @@ void SubmitPrompt::loadDefaultModel() {
     qCDebug(lcSubmitPrompt) << "No models available - user can download manually";
     m_availableModels.clear();
     Q_EMIT availableModelsChanged();
-}
-
-QString SubmitPrompt::formatModelName(const QString& modelName) const {
-    QString formatted = modelName;
-    formatted.replace('-', ' ').replace('_', '.');
-    formatted.replace(QStringLiteral("vl"), QStringLiteral("Video"), Qt::CaseInsensitive);
-
-    QStringList words = formatted.split(' ', Qt::SkipEmptyParts);
-
-    for (QString& word : words) {
-        // Capitalize first letter
-        if (!word.isEmpty() && word[0].isLetter()) {
-            word[0] = word[0].toUpper();
-        }
-
-        // Handle patterns like "7b" -> "7B"
-        static const QRegularExpression sizePattern(R"(^(\d+)([a-z])$)");
-        const auto match = sizePattern.match(word);
-        if (match.hasMatch()) {
-            word = match.captured(1) + match.captured(2).toUpper();
-        }
-    }
-
-    return words.join(' ');
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -491,6 +477,20 @@ void SubmitPrompt::setActiveEndpoint(const QString& endpoint) {
     Q_EMIT activeEndpointChanged();
 }
 
+void SubmitPrompt::initializeEndpoint(int endpoint, const QString &group) {
+  // Format and set the initial endpoint display string
+  QString endpointName = formatEndpointName(endpoint, group);
+  qCDebug(lcSubmitPrompt) << "Initial endpoint set to:" << m_activeEndpoint;
+
+  if(m_activeEndpoint == endpointName && m_endpoint == endpoint) {
+    return;
+  }
+  m_activeEndpoint = endpointName;
+  m_endpoint = endpoint;
+}
+
+QStringList SubmitPrompt::endpointNames() const { return m_endpointNames; }
+
 // ═══════════════════════════════════════════════════════════════
 // Utility Methods
 // ═══════════════════════════════════════════════════════════════
@@ -509,6 +509,44 @@ bool SubmitPrompt::isModelIndexValid(int index) const {
 
 void SubmitPrompt::killConnectorProcess() {
     QProcess::execute("pkill", QStringList() << "connector");
+}
+
+QString SubmitPrompt::formatModelName(const QString& modelName) const {
+    QString formatted = modelName;
+    formatted.replace('-', ' ').replace('_', '.');
+    formatted.replace(QStringLiteral("vl"), QStringLiteral("Video"), Qt::CaseInsensitive);
+
+    QStringList words = formatted.split(' ', Qt::SkipEmptyParts);
+
+    for (QString& word : words) {
+        // Capitalize first letter
+        if (!word.isEmpty() && word[0].isLetter()) {
+            word[0] = word[0].toUpper();
+        }
+
+        // Handle patterns like "7b" -> "7B"
+        static const QRegularExpression sizePattern(R"(^(\d+)([a-z])$)");
+        const auto match = sizePattern.match(word);
+        if (match.hasMatch()) {
+            word = match.captured(1) + match.captured(2).toUpper();
+        }
+    }
+
+    return words.join(' ');
+}
+
+QString SubmitPrompt::formatEndpointName(int endpoint, const QString &group) const {
+  // Format endpoint based on group type
+  if (group == QLatin1String("all")) {
+    return QStringLiteral("All");
+  } else if (group == QLatin1String("usb")) {
+    return QStringLiteral("USB");
+  } else if (group == QLatin1String("pcie")) {
+    return QStringLiteral("PCIe%1").arg(endpoint);
+  }
+
+  // Default formatting
+  return QStringLiteral("PCIe%1").arg(endpoint);
 }
 
 // ============================================================================

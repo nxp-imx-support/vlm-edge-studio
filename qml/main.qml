@@ -28,8 +28,10 @@ Window {
     // ═══════════════════════════════════════════════════════════════
     // CONFIGURATION
     // ═══════════════════════════════════════════════════════════════
-    readonly property bool multiEndpoint: false
     readonly property bool cancelSupport: false
+    readonly property bool configSupport: false
+    readonly property string defaultImagePath: "/usr/share/vlm-edge-studio/assets/images/image.jpg"
+    readonly property string defaultVideoPath: "/usr/share/vlm-edge-studio/assets/videos/video.mp4"
 
     // ═══════════════════════════════════════════════════════════════
     // COLOR SCHEME - Minimal Dark Pro
@@ -394,21 +396,24 @@ Window {
                         mySubmitPrompt.isModelLoaded)
 
             if (mySubmitPrompt.isModelLoaded) {
-                // Model loaded - set analysis mode based on capabilities
+                progressBarModel.allowAnimation = true
+                progressBarModel.value = 100 //progressBarModel.to
+                console.log("[Progress] Model loaded, animating to 100%")
+                // Set analysis mode
                 if (mySubmitPrompt.modelSupportsImage) {
                     window.analysisMode = "image"
-                    console.log("[MODEL] Auto-set to Image Analysis mode")
                 } else if (mySubmitPrompt.modelSupportsVideo) {
                     window.analysisMode = "video"
-                    console.log("[MODEL] Auto-set to Video Analysis mode")
                 } else {
-                    // Text-only model
                     window.analysisMode = "none"
-                    console.log("[MODEL] Text-only model, no analysis mode")
                 }
-                // Auto load default media
                 loadDefaultMedia()
             } else {
+                // Model unloaded → reset bar immediately
+                progressBarModel.allowAnimation = false
+                progressBarModel.value = 0
+                //progressBarModel.allowAnimation = true
+
                 // Model unloaded - reset
                 window.analysisMode = "none"
                 window.mediaSource = "none"
@@ -508,143 +513,29 @@ Window {
         }
     }
 
+    readonly property var modelLoadTimesMs: {
+        "qwen2.5-vl-7b-instruct": 420000,   // 7 min
+        "qwen2.5-image-3b":       120000    // 2 min
+    }
+
+    property int expectedLoadTimeMs: {
+        var models = mySubmitPrompt.availableModelNames()
+        if (models.length === 0 || mySubmitPrompt.selectedModelIndex < 0)
+            return 300000
+
+        var name = models[mySubmitPrompt.selectedModelIndex].toLowerCase()
+
+        for (var key in modelLoadTimesMs) {
+            if (name.indexOf(key) !== -1)
+                return modelLoadTimesMs[key]
+        }
+
+        return 300000
+    }
+
     // ═══════════════════════════════════════════════════════════════
     // UI INDICATORS
     // ═══════════════════════════════════════════════════════════════
-    // INDICATOR 1: Red "REC" during frame capture
-    Rectangle {
-        id: recordingIndicator
-        width: 120
-        height: 40
-        color: "#80000000"
-        radius: 8
-        anchors.top: mediaArea.top
-        anchors.right: mediaArea.right
-        anchors.topMargin: 50
-        anchors.rightMargin: 50
-        visible: window.showRecordingIndicator
-        z: 2000
-
-        Row {
-            anchors.centerIn: parent
-            spacing: 8
-
-            Rectangle {
-                id: recordingDot
-                width: 12
-                height: 12
-                radius: 6
-                color: "#FF0000"
-                anchors.verticalCenter: parent.verticalCenter
-
-                SequentialAnimation on opacity {
-                    running: recordingIndicator.visible
-                    loops: Animation.Infinite
-                    NumberAnimation {
-                        to: 0.2
-                        duration: 600
-                    }
-                    NumberAnimation {
-                        to: 1.0
-                        duration: 600
-                    }
-                }
-            }
-
-            Text {
-                text: "REC"
-                color: "#FF0000"
-                font.pixelSize: 16
-                font.bold: true
-                font.family: "Poppins"
-                anchors.verticalCenter: parent.verticalCenter
-            }
-        }
-    }
-
-    // INDICATOR 2: "Processing video..." during encoding
-    Rectangle {
-        id: processingIndicator
-        width: 250
-        height: 50
-        color: "#80000000"
-        radius: 8
-        anchors.horizontalCenter: parent.horizontalCenter
-        anchors.top: parent.top
-        anchors.topMargin: 150
-        visible: window.showProcessingIndicator
-        z: 2000
-
-        Row {
-            anchors.centerIn: parent
-            spacing: 12
-
-            BusyIndicator {
-                width: 32
-                height: 32
-                running: processingIndicator.visible
-
-                contentItem: Item {
-                    implicitWidth: 32
-                    implicitHeight: 32
-
-                    Item {
-                        id: processingSpinner
-                        x: parent.width / 2 - 16
-                        y: parent.height / 2 - 16
-                        width: 32
-                        height: 32
-
-                        RotationAnimator {
-                            target: processingSpinner
-                            running: processingIndicator.visible
-                            from: 0
-                            to: 360
-                            loops: Animation.Infinite
-                            duration: 1500
-                        }
-
-                        Repeater {
-                            model: 8
-
-                            Rectangle {
-                                id: spinnerDot
-                                x: processingSpinner.width / 2 - width / 2
-                                y: processingSpinner.height / 2 - height / 2
-                                implicitWidth: 4
-                                implicitHeight: 4
-                                radius: 2
-                                color: "#0eafe0"
-
-                                required property int index
-
-                                transform: [
-                                    Translate {
-                                        y: -12
-                                    },
-                                    Rotation {
-                                        angle: spinnerDot.index * 45
-                                        origin.x: 2
-                                        origin.y: 12
-                                    }
-                                ]
-
-                                opacity: 0.3 + (0.7 * ((spinnerDot.index + 1) / 8))
-                            }
-                        }
-                    }
-                }
-            }
-
-            Text {
-                text: "Processing video..."
-                color: "#FFFFFF"
-                font.pixelSize: 16
-                font.family: "Poppins"
-                anchors.verticalCenter: parent.verticalCenter
-            }
-        }
-    }
 
     // INDICATOR 3: Success toast
     Rectangle {
@@ -753,19 +644,21 @@ Window {
         repeat: true
         running: mySubmitPrompt.shouldLoadModel
         onTriggered: {
-            if (progressBarModel.value < (progressBarModel.to * 0.95)) {
-                progressBarModel.value += 100
+            if (progressBarModel.value < 95) {
+                // increment = 95 / (expectedLoadTimeMs / interval)
+                var totalTicks = window.expectedLoadTimeMs / interval
+                var increment  = 95.0 / totalTicks
+                progressBarModel.value = Math.min(
+                    progressBarModel.value + increment, 95)
             }
         }
 
         onRunningChanged: {
             if (running) {
                 // Reset to 0 when loading starts
+                progressBarModel.allowAnimation = false
                 progressBarModel.value = 0
-            } else {
-                // When stopped (model ready), jump to 100%
-                progressBarModel.value = progressBarModel.to
-            }
+            } 
         }
     }
 
@@ -841,7 +734,7 @@ Window {
             id: brandingBar
             Layout.fillWidth: true
             Layout.preferredHeight: theme.brandingHeight
-	    Layout.maximumHeight: 15
+	        Layout.maximumHeight: 15
 
             gradient: Gradient {
                 orientation: Gradient.Horizontal
@@ -962,8 +855,7 @@ Window {
             // ── LEFT: Media Area ────────────────────────────────────
             Rectangle {
                 id: mediaArea
-		        //Layout.fillWidth: true
-                Layout.fillHeight: true
+                Layout.fillHeight: theme.contentRow
                 Layout.preferredWidth: parent.width * 0.42
                 color: theme.bgSecondary
                 radius: theme.standardRadius
@@ -1204,14 +1096,148 @@ Window {
                     verticalAlignment: Text.AlignVCenter
                     font.family: "Poppins"
                 }
+
+                // Red "REC" during frame capture
+                Rectangle {
+                    id: recordingIndicator
+                    width: 120
+                    height: 40
+                    color: "#80000000"
+                    radius: 8
+                    anchors.top: mediaArea.top
+                    anchors.right: mediaArea.right
+                    anchors.topMargin: 50
+                    anchors.rightMargin: 50
+                    visible: window.showRecordingIndicator
+                    z: 2000
+
+                    Row {
+                        anchors.centerIn: parent
+                        spacing: 8
+
+                        Rectangle {
+                            id: recordingDot
+                            width: 12
+                            height: 12
+                            radius: 6
+                            color: "#FF0000"
+                            anchors.verticalCenter: parent.verticalCenter
+
+                            SequentialAnimation on opacity {
+                                running: recordingIndicator.visible
+                                loops: Animation.Infinite
+                                NumberAnimation {
+                                    to: 0.2
+                                    duration: 600
+                                }
+                                NumberAnimation {
+                                    to: 1.0
+                                    duration: 600
+                                }
+                            }
+                        }
+
+                        Text {
+                            text: "REC"
+                            color: "#FF0000"
+                            font.pixelSize: 16
+                            font.bold: true
+                            font.family: "Poppins"
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+                    }
+                }
+
+                // "Processing video..." during encoding
+                Rectangle {
+                    id: processingIndicator
+                    width: 250
+                    height: 50
+                    color: "#80000000"
+                    radius: 8
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    anchors.top: parent.top
+                    anchors.topMargin: 150
+                    visible: window.showProcessingIndicator
+                    z: 2000
+
+                    Row {
+                        anchors.centerIn: parent
+                        spacing: 12
+
+                        BusyIndicator {
+                            width: 32
+                            height: 32
+                            running: processingIndicator.visible
+
+                            contentItem: Item {
+                                implicitWidth: 32
+                                implicitHeight: 32
+
+                                Item {
+                                    id: processingSpinner
+                                    x: parent.width / 2 - 16
+                                    y: parent.height / 2 - 16
+                                    width: 32
+                                    height: 32
+
+                                    RotationAnimator {
+                                        target: processingSpinner
+                                        running: processingIndicator.visible
+                                        from: 0
+                                        to: 360
+                                        loops: Animation.Infinite
+                                        duration: 1500
+                                    }
+
+                                    Repeater {
+                                        model: 8
+
+                                        Rectangle {
+                                            id: spinnerDot
+                                            x: processingSpinner.width / 2 - width / 2
+                                            y: processingSpinner.height / 2 - height / 2
+                                            implicitWidth: 4
+                                            implicitHeight: 4
+                                            radius: 2
+                                            color: "#0eafe0"
+
+                                            required property int index
+
+                                            transform: [
+                                                Translate {
+                                                    y: -12
+                                                },
+                                                Rotation {
+                                                    angle: spinnerDot.index * 45
+                                                    origin.x: 2
+                                                    origin.y: 12
+                                                }
+                                            ]
+
+                                            opacity: 0.3 + (0.7 * ((spinnerDot.index + 1) / 8))
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        Text {
+                            text: "Processing video..."
+                            color: "#FFFFFF"
+                            font.pixelSize: 16
+                            font.family: "Poppins"
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+                    }
+                }
             }
         
             // ── RIGHT: Output Area ──────────────────────────────────
             Rectangle {
                 id: outputArea
                 Layout.fillWidth: true
-                Layout.fillHeight: true
-                //Layout.preferredWidth: parent.width * 0.6
+                Layout.fillHeight: theme.contentRow
                 color: theme.bgSecondary
                 radius: theme.standardRadius
                 border.color: theme.borderInactive
@@ -1246,7 +1272,7 @@ Window {
                                 width: flickable.contentWidth
                                        - theme.standardMargin * 2
                                 color: theme.textPrimary
-                                text: mySubmitPrompt.outputLlm
+                                text: mySubmitPrompt.modelResponseText
                                 font.pixelSize: theme.fontLarge
                                 font.family: "Poppins"
                                 wrapMode: Text.WordWrap
@@ -1593,11 +1619,11 @@ Window {
                                 Layout.preferredWidth: 200
                                 Layout.preferredHeight: 32
                                 Layout.alignment: Qt.AlignVCenter
-                                model: mySubmitPrompt.availableModelNames
-                                currentIndex: mySubmitPrompt.currentModelIndex
-                                enabled: !mySubmitPrompt.modelLoaded
-                                         && !mySubmitPrompt.processingLLM
-                                         && !mySubmitPrompt.loadModel
+                                model: mySubmitPrompt.availableModelNames()
+                                currentIndex: mySubmitPrompt.selectedModelIndex
+                                enabled: !mySubmitPrompt.isModelLoaded
+                                         && !mySubmitPrompt.isProcessingInference
+                                         && !mySubmitPrompt.shouldLoadModel
                                          && mySubmitPrompt.availableModelNames().length > 0
 
                                 /*
@@ -1607,7 +1633,7 @@ Window {
                                 }
 
                                 onActivated: function(index) {
-                                    if (index !== mySubmitPrompt.currentModelIndex)
+                                    if (index !== mySubmitPrompt.selectedModelIndex)
                                         mySubmitPrompt.setCurrentModelIndex(index)
                                 }
 
@@ -1617,15 +1643,15 @@ Window {
                                         modelSelector.model = mySubmitPrompt.availableModelNames()
                                     }
                                     function onCurrentModelIndexChanged() {
-                                        if (modelSelector.currentIndex !== mySubmitPrompt.currentModelIndex)
-                                            modelSelector.currentIndex = mySubmitPrompt.currentModelIndex
+                                        if (modelSelector.currentIndex !== mySubmitPrompt.selectedModelIndex)
+                                            modelSelector.currentIndex = mySubmitPrompt.selectedModelIndex
                                     }
                                 }*/
 
                                 onCurrentIndexChanged: {
                                     console.log("[QML] Model selector currentIndex changed to:",
                                                 currentIndex)
-                                    console.log("[QML] Backend currentModelIndex:",
+                                    console.log("[QML] Backend selectedModelIndex:",
                                                 mySubmitPrompt.selectedModelIndex)
 
                                     if (currentIndex !== mySubmitPrompt.selectedModelIndex) {
@@ -1646,7 +1672,7 @@ Window {
                                     }
 
                                     function onSelectedModelIndexChanged() {
-                                        console.log("[QML] currentModelIndexChanged signal received")
+                                        console.log("[QML] selectedModelIndexChanged signal received")
                                         console.log("[QML] New index:",
                                                     mySubmitPrompt.selectedModelIndex)
                                         modelSelector.currentIndex = mySubmitPrompt.selectedModelIndex
@@ -1674,9 +1700,9 @@ Window {
                                 Layout.alignment: Qt.AlignVCenter
                                 model: mySubmitPrompt.endpointNames
                                 currentIndex: 0
-                                enabled: !mySubmitPrompt.modelLoaded
-                                         && !mySubmitPrompt.loadModel
-                                         && !mySubmitPrompt.processingLLM
+                                enabled: !mySubmitPrompt.isModelLoaded
+                                         && !mySubmitPrompt.shouldLoadModel
+                                         && !mySubmitPrompt.isProcessingInference
                                 onActivated: function(index) {
                                     mySubmitPrompt.initializeEndpoint(index, currentText)
                                 }
@@ -1693,9 +1719,9 @@ Window {
                                 Layout.alignment: Qt.AlignVCenter
                                 text: "Load"
                                 accentColor: theme.accentSecondary
-                                enabled: !mySubmitPrompt.modelLoaded
-                                         && !mySubmitPrompt.loadModel
-                                         && mySubmitPrompt.currentModelIndex >= 0
+                                enabled: !mySubmitPrompt.isModelLoaded
+                                         && !mySubmitPrompt.shouldLoadModel
+                                         && mySubmitPrompt.selectedModelIndex >= 0
                                          && mySubmitPrompt.availableModelNames().length > 0
                                 onClicked: {
                                     progressBarModel.value = 0
@@ -1710,8 +1736,8 @@ Window {
                                 Layout.alignment: Qt.AlignVCenter
                                 text: "Eject"
                                 accentColor: theme.accentWarning
-                                enabled: mySubmitPrompt.modelLoaded
-                                         && !mySubmitPrompt.processingLLM
+                                enabled: mySubmitPrompt.isModelLoaded
+                                         && !mySubmitPrompt.isProcessingInference
                                 onClicked: mySubmitPrompt.ejectModel()
                             }
 
@@ -1720,9 +1746,10 @@ Window {
                                 Layout.preferredWidth: 36
                                 Layout.preferredHeight: 36
                                 Layout.alignment: Qt.AlignVCenter
-                                enabled: !mySubmitPrompt.modelLoaded
-                                         && !mySubmitPrompt.loadModel
-                                         && !mySubmitPrompt.processingLLM
+                                visible: configSupport
+                                enabled: !mySubmitPrompt.isModelLoaded
+                                         && !mySubmitPrompt.shouldLoadModel
+                                         && !mySubmitPrompt.isProcessingInference
                                 opacity: enabled ? 1.0 : 0.3
                                 hoverEnabled: true
                                 onClicked: modelConfigPopup.open()
@@ -1768,45 +1795,56 @@ Window {
                     }
 
                     // ── Progress Bar ────────────────────────────
-                    // FIX: visible:false collapses height, use height:0 + clip instead
-                    AnimatedProgressBar {
-                        id: progressBarModel
+                    // Visible:false collapses height, use height:0 + clip instead
+
+                    Item {
+                        id: progressContainer
                         Layout.fillWidth: true
-                        Layout.preferredHeight: mySubmitPrompt.loadModel ? 15 : 0  // Collapses when hidden
-                        visible: mySubmitPrompt.loadModel
-                        clip: true
-                        from: 0
-                        to: mySubmitPrompt.modelLoadTime
-                        value: 0
-                        property bool allowAnimation: true
+                        Layout.preferredHeight: mySubmitPrompt.shouldLoadModel ? 15 : 0
+                        clip: true   // hides bar content when height = 0
 
                         Behavior on Layout.preferredHeight {
-                            NumberAnimation { duration: theme.animationFast }
+                            NumberAnimation {
+                                duration: theme.animationFast
+                                easing.type: Easing.OutQuad
+                            }
                         }
 
-                        onVisibleChanged: {
-                            allowAnimation = false
-                            value = visible ? 0 : progressBarModel.to
-                            allowAnimation = true
-                        }
+                        AnimatedProgressBar {
+                            id: progressBarModel
+                            anchors.fill: parent
+                            visible: mySubmitPrompt.shouldLoadModel
+                            from: 0
+                            to: 100
+                            value: 0
+                            property bool allowAnimation: false // disable by default to prevent initial animation
 
-                        Text {
-                            id: progressText
-                            anchors.centerIn: parent
-                            visible: progressBarModel.visible
-                            text: Math.round(
-                                progressBarModel.value
-                                / progressBarModel.to * 100.0) + "%"
-                            font.pixelSize: theme.fontProgress
-                            font.family: "Poppins"
-                            font.weight: Font.Medium
-                            color: theme.textPrimary
+                            onVisibleChanged: {
+                                if (visible) {
+                                    allowAnimation = false
+                                    value = 0
+                                    //allowAnimation = true
+                                }
+                            }
 
-                            SequentialAnimation on opacity {
-                                running: progressBarModel.visible
-                                loops: Animation.Infinite
-                                NumberAnimation { from: 0.7; to: 1.0; duration: theme.animationPulse }
-                                NumberAnimation { from: 1.0; to: 0.7; duration: theme.animationPulse }
+                            Text {
+                                id: progressText
+                                anchors.centerIn: parent
+                                visible: progressBarModel.visible
+                                text: Math.round(
+                                    progressBarModel.value
+                                    / progressBarModel.to * 100.0) + "%"
+                                font.pixelSize: theme.fontProgress
+                                font.family: "Poppins"
+                                font.weight: Font.Medium
+                                color: theme.textPrimary
+
+                                SequentialAnimation on opacity {
+                                    running: progressBarModel.visible
+                                    loops: Animation.Infinite
+                                    NumberAnimation { from: 0.7; to: 1.0; duration: theme.animationPulse }
+                                    NumberAnimation { from: 1.0; to: 0.7; duration: theme.animationPulse }
+                                }
                             }
                         }
                     }
@@ -1841,24 +1879,28 @@ Window {
                 RowLayout {
                     id: rowLayout
                     anchors.fill: parent
-                    spacing: 1
+                    anchors.margins: 8
+                    spacing: 4
 
                     // LOAD BUTTON - Opens file dialog
                     Button {
                         id: load_button
-                        text: qsTr("Button")
-                        Layout.alignment: Qt.AlignHCenter | Qt.AlignTop
+                        Layout.fillWidth:  true
+                        Layout.fillHeight: true
+                        display: AbstractButton.IconOnly
                         enabled: mySubmitPrompt.isModelLoaded
                                 && !mySubmitPrompt.isProcessingInference
                                 && window.mediaSource !== "camera"
                         opacity: enabled ? 1.0 : 0.3
-                        icon.height: 90
-                        icon.width: 90
-                        display: AbstractButton.IconOnly
-                        icon.source: down ? "images/load_pressed.svg" : "images/load_unpressed.svg"
-                        background: Rectangle {
-                            color: "transparent"
+                        background: Rectangle { color: "transparent" }
+                        contentItem: Image {
+                            anchors.fill: parent
+                            source: load_button.down ? "images/load_pressed.svg" : "images/load_unpressed.svg"
+                            fillMode: Image.PreserveAspectFit
+                            smooth: true
+                            antialiasing: true
                         }
+
                         onClicked: {
                             // Set file dialog filters based on model capabilities
                             var filters = []
@@ -1942,19 +1984,22 @@ Window {
                     // IMAGE LOAD
                     Button {
                         id: image_button
-                        visible: true
+                        Layout.fillWidth:  true
+                        Layout.fillHeight: true
+                        display: AbstractButton.IconOnly
                         enabled: mySubmitPrompt.isModelLoaded
                                 && !mySubmitPrompt.isProcessingInference
                                 && window.analysisMode === "image"
                         opacity: enabled ? 1.0 : 0.3
-                        icon.height: 90
-                        icon.width: 90
-                        icon.source: "images/image.svg"
-                        Layout.alignment: Qt.AlignHCenter | Qt.AlignTop
-                        display: AbstractButton.IconOnly
-                        background: Rectangle {
-                            color: "transparent"
+                        background: Rectangle { color: "transparent" }
+                        contentItem: Image {
+                            anchors.fill: parent
+                            source: "images/image.svg"
+                            fillMode: Image.PreserveAspectFit
+                            smooth: true
+                            antialiasing: true
                         }
+
                         onClicked: {
                             console.log("[BUTTON] Image button clicked")
                             console.log("[BUTTON] Current mediaSource:", mediaSource)
@@ -1991,18 +2036,20 @@ Window {
                     // VIDEO LOAD
                     Button {
                         id: video_button
-                        visible: true
+                        Layout.fillWidth:  true
+                        Layout.fillHeight: true
+                        display: AbstractButton.IconOnly
                         enabled: mySubmitPrompt.isModelLoaded
                                 && !mySubmitPrompt.isProcessingInference
                                 && window.analysisMode === "video"
                         opacity: enabled ? 1.0 : 0.3
-                        icon.height: 90
-                        icon.width: 90
-                        icon.source: "images/video.svg"
-                        Layout.alignment: Qt.AlignHCenter | Qt.AlignTop
-                        display: AbstractButton.IconOnly
-                        background: Rectangle {
-                            color: "transparent"
+                        background: Rectangle { color: "transparent" }
+                        contentItem: Image {
+                            anchors.fill: parent
+                            source: "images/video.svg"
+                            fillMode: Image.PreserveAspectFit
+                            smooth: true
+                            antialiasing: true
                         }
 
                         onClicked: {
@@ -2044,20 +2091,24 @@ Window {
                     // CAMERA BUTTON - Activates live camera
                     Button {
                         id: camera_button
-                        visible: true
+                        Layout.fillWidth:  true
+                        Layout.fillHeight: true
+                        display: AbstractButton.IconOnly
                         enabled: mySubmitPrompt.isModelLoaded
                                 && !mySubmitPrompt.isProcessingInference
                                 && (mySubmitPrompt.modelSupportsImage
                                     || mySubmitPrompt.modelSupportsVideo)
                         opacity: enabled ? 1.0 : 0.3
-                        icon.height: 90
-                        icon.width: 90
-                        icon.source: "images/camera.svg"
-                        Layout.alignment: Qt.AlignHCenter | Qt.AlignTop
-                        display: AbstractButton.IconOnly
                         background: Rectangle {
                             color: mediaSource === "camera" ? "#80000000" : "transparent"
                             radius: 8
+                        }
+                        contentItem: Image {
+                            anchors.fill: parent
+                            source: "images/camera.svg"
+                            fillMode: Image.PreserveAspectFit
+                            smooth: true
+                            antialiasing: true
                         }
 
                         onClicked: {
@@ -2127,25 +2178,23 @@ Window {
                     // CAPTURE BUTTON - Context-aware: records video OR captures frame
                     Button {
                         id: capture_button
-                        text: "Button"
-
+                        Layout.fillWidth:  true
+                        Layout.fillHeight: true
+                        display: AbstractButton.IconOnly
                         // Reuse existing flags - button disabled when any indicator is showing
                         enabled: mySubmitPrompt.isModelLoaded
                                 && window.mediaSource === "camera"
                                 && video_1.cameraConnected
                                 && !window.showRecordingIndicator
                                 && !window.showProcessingIndicator
-
                         opacity: enabled ? 1.0 : 0.3
-
-                        icon.height: 90
-                        icon.width: 90
-                        display: AbstractButton.IconOnly
-                        icon.source: down ? "images/capture_pressed.svg" : "images/capture_unpressed.svg"
-                        Layout.alignment: Qt.AlignHCenter | Qt.AlignTop
-
-                        background: Rectangle {
-                            color: "transparent"
+                        background: Rectangle { color: "transparent" }
+                        contentItem: Image {
+                            anchors.fill: parent
+                            source: capture_button.down ? "images/capture_pressed.svg" : "images/capture_unpressed.svg"
+                            fillMode: Image.PreserveAspectFit
+                            smooth: true
+                            antialiasing: true
                         }
 
                         onClicked: {
@@ -2274,7 +2323,7 @@ Window {
                             && !mySubmitPrompt.isLoadingMedia
                     opacity: enabled ? 1.0 : 0.3
 
-                    onClicked: mySubmitPrompt.setUserPromptText(input_prompt.text)
+                    onClicked: mySubmitPrompt.setUserPromptText(inputPrompt.text)
 
                     background: Rectangle {
                         color: submitButton.hovered && submitButton.enabled
@@ -2528,14 +2577,17 @@ Window {
         property bool allowAnimation: true
 
         background: Rectangle {
-            implicitWidth: parent.width
+            implicitWidth:  parent.width
             implicitHeight: parent.height
-            color: theme.bgTertiary
+            color:  theme.bgTertiary
             radius: 10
             Rectangle {
-                anchors.fill: parent; anchors.margins: 1
-                radius: 9; color: "transparent"
-                border.width: 1; border.color: "#20FFFFFF"
+                anchors.fill: parent
+                anchors.margins: 1
+                radius: 9
+                color: "transparent"
+                border.width: 1
+                border.color: "#20FFFFFF"
             }
         }
 
@@ -2543,24 +2595,29 @@ Window {
             Rectangle {
                 id: mainProgress
                 height: parent.height
-                width: progBar.visualPosition * parent.width
+                width:  progBar.visualPosition * parent.width
                 radius: 10
                 transformOrigin: Item.Left
                 clip: true
+
                 gradient: Gradient {
                     orientation: Gradient.Horizontal
                     GradientStop { position: 0.0; color: "#00D9FF" }
                     GradientStop { position: 1.0; color: "#0A84FF" }
                 }
+
                 SequentialAnimation on scale {
-                    running: progBar.visible
+                    running: progBar.visible && mainProgress.width > 0
                     loops: Animation.Infinite
                     NumberAnimation { from: 1.0; to: 1.02; duration: theme.animationSlow; easing.type: Easing.InOutQuad }
                     NumberAnimation { from: 1.02; to: 1.0; duration: theme.animationSlow; easing.type: Easing.InOutQuad }
                 }
+
                 Rectangle {
                     id: shimmer
-                    width: 60; height: parent.height; radius: 10
+                    width:  60
+                    height: parent.height
+                    radius: 10
                     gradient: Gradient {
                         orientation: Gradient.Horizontal
                         GradientStop { position: 0.0; color: "#00FFFFFF" }
@@ -2571,7 +2628,12 @@ Window {
                     SequentialAnimation on x {
                         running: progBar.visible && mainProgress.width > shimmer.width
                         loops: Animation.Infinite
-                        NumberAnimation { from: 0; to: mainProgress.width - shimmer.width; duration: theme.animationShimmer; easing.type: Easing.InOutQuad }
+                        NumberAnimation {
+                            from: 0
+                            to: mainProgress.width - shimmer.width
+                            duration: theme.animationShimmer
+                            easing.type: Easing.InOutQuad
+                        }
                         PauseAnimation { duration: theme.animationFast }
                     }
                 }
@@ -2580,7 +2642,10 @@ Window {
 
         Behavior on value {
             enabled: progBar.allowAnimation
-            NumberAnimation { duration: theme.animationMedium; easing.type: Easing.OutQuad }
+            NumberAnimation {
+                duration: theme.animationMedium
+                easing.type: Easing.OutQuad
+            }
         }
     }
 

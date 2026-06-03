@@ -99,6 +99,7 @@ class SubmitPrompt : public QObject {
     // Endpoint Configuration
     Q_PROPERTY(QString activeEndpoint READ activeEndpoint WRITE setActiveEndpoint
                NOTIFY activeEndpointChanged FINAL)
+    Q_PROPERTY(QStringList endpointNames READ endpointNames NOTIFY endpointNamesChanged)
 
     // Auto-fetch Model Properties
     Q_PROPERTY(bool isDownloadingModels READ isDownloadingModels NOTIFY isDownloadingModelsChanged)
@@ -122,10 +123,10 @@ public:
     Q_INVOKABLE QStringList availableModelNames() const;
     Q_INVOKABLE void clearOutputDisplay();
     Q_INVOKABLE void killConnectorProcess();
-    //Q_INVOKABLE QStringList getAvailableModels() const;
     Q_INVOKABLE void downloadMissingModels();
     Q_INVOKABLE void cancelDownload();
     Q_INVOKABLE void refreshModelsList();
+    Q_INVOKABLE void initializeEndpoint(int endpoint, const QString &group);
 
     // Getters
     QString userPromptText() const { return m_userPromptText; }
@@ -155,14 +156,11 @@ public:
     bool modelSupportsImage() const;
     bool modelSupportsVideo() const;
 
-    //bool isDownloadingModels() const;
-    //int downloadProgress() const;
-    //QString downloadStatus() const;
-    //bool hasDownloadError() const;
     bool isDownloadingModels() const { return m_isDownloadingModels; }
     int downloadProgress() const { return m_downloadProgress; }
     QString downloadStatus() const { return m_downloadStatus; }
     bool hasDownloadError() const {return m_hasDownloadError; }
+    QStringList endpointNames() const;
 
 Q_SIGNALS:
     // Input/Output signals
@@ -200,6 +198,7 @@ Q_SIGNALS:
     void downloadStatusChanged();
     void hasDownloadErrorChanged();
     void modelDownloadCompleted();
+    void endpointNamesChanged();
 
 public Q_SLOTS:
     // Setters
@@ -238,7 +237,9 @@ private:
     void loadDefaultModel();
     void updatePromptText(const QString& prompt);
     bool isModelIndexValid(int index) const;
+
     QString formatModelName(const QString& modelName) const;
+    QString formatEndpointName(int endpoint, const QString &group) const;
 
     void setModelResponseText(const QString& text);
     void setInferenceMetrics(const QString& metrics);
@@ -270,6 +271,7 @@ private:
     bool m_shouldLoadModel;
     bool m_isModelLoaded;
     int m_modelLoadingProgress;
+    int m_endpoint;
 
     // Model list state
     bool m_isLoadingModelList;
@@ -287,6 +289,7 @@ private:
     QProcess *m_downloadProcess;
     QStringList m_modelsToDownload;
     int m_currentDownloadIndex;
+    QStringList m_endpointNames;
 
     // Backend connector
     AAFConnector* m_aafConnector;

@@ -272,7 +272,7 @@ QString AAFConnector::formatModelName(const QString &modelId) const
     return words.join(" ");
 }
 
-void AAFConnector::setModelById(const QString &modelId)
+void AAFConnector::setModelById(const QString &modelId, const int &endpoint)
 {
     if (m_currentModelId == modelId) {
         qCDebug(lcConnector) << "Model already set to:" << modelId;
@@ -285,7 +285,6 @@ void AAFConnector::handleNetworkReply()
 {
     QNetworkReply *reply = qobject_cast<QNetworkReply*>(sender());
     if (!reply) {
-        qCWarning(lcConnector) << "[METRICS DEBUG] handleNetworkReply: reply is null!";
         return;
     }
 
@@ -409,6 +408,10 @@ void AAFConnector::handleStreamingData()
     }
 }
 
+// ============================================================================
+// Public API - Metrics, Devices
+// ============================================================================
+
 void AAFConnector::requestMetrics(const QString &modelName)
 {
     QString model = modelName.isEmpty() ? m_currentModelId : modelName;
@@ -420,6 +423,14 @@ void AAFConnector::requestMetrics(const QString &modelName)
     connect(reply, &QNetworkReply::finished, this, &AAFConnector::handleMetricsReply);
     connect(reply, QOverload<QNetworkReply::NetworkError>::of(&QNetworkReply::errorOccurred),
             this, &AAFConnector::handleNetworkError);
+}
+
+void AAFConnector::requestDevices() {
+  qCDebug(lcConnector) << "Fetching devices from:" << m_serverUrl + AAFConfig::ENDPOINT_DEVICES;
+
+  QNetworkReply *reply = m_networkManager->get(
+      createJsonRequest(QUrl(m_serverUrl + AAFConfig::ENDPOINT_DEVICES)));
+  connect(reply, &QNetworkReply::finished, this, &AAFConnector::handleDevicesReply);
 }
 
 QNetworkRequest AAFConnector::createMetricsRequest(const QString &modelName) const
@@ -437,6 +448,10 @@ QNetworkRequest AAFConnector::createMetricsRequest(const QString &modelName) con
     return request;
 }
 
+// ============================================================================
+// Private - API Handling
+// ============================================================================
+
 void AAFConnector::handleMetricsReply()
 {
     QNetworkReply *reply = qobject_cast<QNetworkReply*>(sender());
@@ -444,46 +459,27 @@ void AAFConnector::handleMetricsReply()
         qCWarning(lcConnector) << "handleMetricsReply: reply is null";
         return;
     }
-
-    if (reply->error() == QNetworkReply::NoError) {
-        QByteArray data = reply->readAll();
-        QJsonParseError parseError;
-        QJsonDocument doc = QJsonDocument::fromJson(data, &parseError);
-
-        if (parseError.error == QJsonParseError::NoError) {
-            QJsonObject rootObject = doc.object();
-
-            QJsonObject metrics;
-            if (rootObject.contains(m_currentModelId)) {
-                // Direct model key found
-                metrics = rootObject[m_currentModelId].toObject();
-                qCDebug(lcConnector) << "Found metrics for model:" << m_currentModelId;
-            } else if (!rootObject.isEmpty()) {
-                // Take first model's metrics (fallback)
-                QString firstKey = rootObject.keys().first();
-                metrics = rootObject[firstKey].toObject();
-                qCDebug(lcConnector) << "Using metrics from model:" << firstKey;
-            } else {
-                qCWarning(lcConnector) << "Empty metrics object received";
-                Q_EMIT errorOccurred("No metrics data available");
-                reply->deleteLater();
-                return;
-            }
-
-            QString metricsText = formatMetrics(metrics);
-            qCDebug(lcConnector) << "Formatted metrics:" << metricsText;
-
-            Q_EMIT metricsReceived(metricsText);
-        } else {
-            qCWarning(lcConnector) << "Failed to parse metrics JSON:" << parseError.errorString();
-            qCWarning(lcConnector) << "Raw data was:" << data;
-            Q_EMIT errorOccurred("Failed to parse metrics: " + parseError.errorString());
-        }
-    } else {
+    if (reply->error() != QNetworkReply::NoError) {
         qCWarning(lcConnector) << "Metrics request failed:" << reply->errorString();
-        qCWarning(lcConnector) << "HTTP status code:" << reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
         Q_EMIT errorOccurred("Metrics request failed: " + reply->errorString());
+        reply->deleteLater();
+        return;
     }
+
+    QJsonParseError parseError;
+    const QByteArray data = reply->readAll();
+    const QJsonDocument doc = QJsonDocument::fromJson(data, &parseError);
+
+    if (parseError.error != QJsonParseError::NoError) {
+        qCWarning(lcConnector) << "Failed to parse metrics:"
+                            << parseError.errorString();
+        Q_EMIT errorOccurred("Failed to parse metrics: " + parseError.errorString());
+        reply->deleteLater();
+        return;
+    }
+
+    const QString metricsText = formatMetrics(doc.object());
+    Q_EMIT metricsReceived(metricsText);
 
     reply->deleteLater();
 }
@@ -541,6 +537,63 @@ QString AAFConnector::formatMetrics(const QJsonObject &metrics) const
     return lines.join(" | ");
 }
 
+void AAFConnector::handleDevicesReply() {
+  QNetworkReply *reply = qobject_cast<QNetworkReply *>(sender());
+  if (!reply) return;
+
+  QStringList endpointNames;
+
+  if (reply->error() != QNetworkReply::NoError) {
+    qCWarning(lcConnector) << "Devices request failed:" << reply->errorString()
+                           << "- falling back to PCIe0";
+    endpointNames << QStringLiteral("PCIe0");
+    Q_EMIT devicesReceived(endpointNames);
+    reply->deleteLater();
+    return;
+  }
+
+  QJsonParseError parseError;
+  const QJsonDocument doc = QJsonDocument::fromJson(reply->readAll(), &parseError);
+
+  if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
+    qCWarning(lcConnector) << "Failed to parse devices response:" << parseError.errorString();
+    endpointNames << QStringLiteral("PCIe0");
+    Q_EMIT devicesReceived(endpointNames);
+    reply->deleteLater();
+    return;
+  }
+
+  // Parse response:
+  // {"device_count":2,"devices":[{"device_id":0,"memory":{"total_human":"16.00 GB",...},...},...]}
+  const QJsonArray devices = doc.object()["devices"].toArray();
+
+  for (const QJsonValue &val : devices) {
+    const QJsonObject dev = val.toObject();
+    const int    id        = dev["device_id"].toInt();
+    const QString totalMem = dev["memory"].toObject()["total_human"].toString();
+
+    // Format: "PCIe0 (16 GB)"
+    const QString name = QStringLiteral("PCIe%1 (%2)").arg(id).arg(totalMem);
+    endpointNames << name;
+
+    qCDebug(lcConnector) << "Device:" << name
+                         << "| Used:" << dev["memory"].toObject()["used_human"].toString()
+                         << "/" << totalMem
+                         << QString("(%1%)")
+                                .arg(dev["memory"].toObject()["utilization_percent"].toDouble(),
+                                     0, 'f', 1);
+  }
+
+  if (endpointNames.isEmpty()) {
+    qCWarning(lcConnector) << "No devices parsed, falling back to PCIe0";
+    endpointNames << QStringLiteral("PCIe0");
+  }
+
+  qCDebug(lcConnector) << "Endpoint names:" << endpointNames;
+  Q_EMIT devicesReceived(endpointNames);
+  reply->deleteLater();
+}
+
 void AAFConnector::handleNetworkError(QNetworkReply::NetworkError error)
 {
     QNetworkReply *reply = qobject_cast<QNetworkReply*>(sender());
@@ -570,7 +623,11 @@ void AAFConnector::onRequestTimeout()
     Q_EMIT errorOccurred("Request timed out after " + QString::number(m_timeout / 1000) + " seconds");
 }
 
-// Private helper methods
+
+// ============================================================================
+// Private - Request Creation
+// ============================================================================
+
 QNetworkRequest AAFConnector::createRequest() const
 {
     QUrl url(m_serverUrl + "/v1/chat/completions");
@@ -580,6 +637,14 @@ QNetworkRequest AAFConnector::createRequest() const
     request.setHeader(QNetworkRequest::UserAgentHeader, "AAFConnector/1.0");
     request.setRawHeader("Accept", "application/json");
 
+    return request;
+}
+
+QNetworkRequest AAFConnector::createJsonRequest(const QUrl &url) const {
+    QNetworkRequest request(url);
+    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+    request.setHeader(QNetworkRequest::UserAgentHeader, "AAFConnector/1.0");
+    request.setRawHeader("Accept", "application/json");
     return request;
 }
 
@@ -787,7 +852,7 @@ bool AAFConnector::validateModelInstallation(const QString &modelName)
     }
 }
 
-void AAFConnector::loadModel(const ModelInfo &modelInfo)
+void AAFConnector::loadModel(const ModelInfo &modelInfo, const int &endpoint)
 {
     if (modelInfo.name.isEmpty()) {
         Q_EMIT modelOperationError("Empty model name provided");
@@ -808,6 +873,7 @@ void AAFConnector::loadModel(const ModelInfo &modelInfo)
     QJsonObject payload;
     payload["name"] = modelInfo.name;
     payload["type"] = modelInfo.type;
+    payload["endpoint"] = endpoint;
     payload["tool_calling"] = modelInfo.toolCalling;
 
     QJsonDocument doc(payload);
