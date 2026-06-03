@@ -32,6 +32,7 @@ Window {
     readonly property bool configSupport: false
     readonly property string defaultImagePath: "/usr/share/vlm-edge-studio/assets/images/image.jpg"
     readonly property string defaultVideoPath: "/usr/share/vlm-edge-studio/assets/videos/video.mp4"
+    property bool isProgressBarCompleting: false
 
     // ═══════════════════════════════════════════════════════════════
     // COLOR SCHEME - Minimal Dark Pro
@@ -61,7 +62,7 @@ Window {
         readonly property int standardRadius: 15
         readonly property int smallRadius: 5
         readonly property int borderWidth: 2
-        readonly property int contentRow: 1080 - brandingHeight - titleHeight - inputHeight - bottomMargin
+        readonly property int contentRow: 820 // 1080 - brandingHeight - titleHeight - inputHeight - bottomMargin
 
         // Font sizes
         readonly property int fontLarge: 26
@@ -396,9 +397,12 @@ Window {
                         mySubmitPrompt.isModelLoaded)
 
             if (mySubmitPrompt.isModelLoaded) {
+                window.isProgressBarCompleting = true
                 progressBarModel.allowAnimation = true
                 progressBarModel.value = 100 //progressBarModel.to
-                console.log("[Progress] Model loaded, animating to 100%")
+                console.log("[Progress] Model loaded, animating to 100% then fading out")
+                progressCompleteTimer.start()
+
                 // Set analysis mode
                 if (mySubmitPrompt.modelSupportsImage) {
                     window.analysisMode = "image"
@@ -410,9 +414,10 @@ Window {
                 loadDefaultMedia()
             } else {
                 // Model unloaded → reset bar immediately
+                progressCompleteTimer.stop()
+                window.isProgressBarCompleting = false
                 progressBarModel.allowAnimation = false
                 progressBarModel.value = 0
-                //progressBarModel.allowAnimation = true
 
                 // Model unloaded - reset
                 window.analysisMode = "none"
@@ -515,6 +520,7 @@ Window {
 
     readonly property var modelLoadTimesMs: {
         "qwen2.5-vl-7b-instruct": 420000,   // 7 min
+        "qwen2_5-vl-3b":          240000,   // 4 min
         "qwen2.5-image-3b":       120000    // 2 min
     }
 
@@ -659,6 +665,15 @@ Window {
                 progressBarModel.allowAnimation = false
                 progressBarModel.value = 0
             } 
+        }
+    }
+
+    Timer {
+        id: progressCompleteTimer
+        interval: 800  // animationMedium (500ms) + 300ms buffer for fade
+        repeat: false
+        onTriggered: {
+            window.isProgressBarCompleting = false
         }
     }
 
@@ -849,7 +864,7 @@ Window {
             Layout.preferredHeight: theme.contentRow
 	        Layout.leftMargin: theme.standardMargin
 	        Layout.rightMargin: theme.standardMargin
-            Layout.bottomMargin: theme.bottonMargin
+            Layout.bottomMargin: theme.bottomMargin
 	        spacing: theme.standardMargin
 
             // ── LEFT: Media Area ────────────────────────────────────
@@ -1800,7 +1815,8 @@ Window {
                     Item {
                         id: progressContainer
                         Layout.fillWidth: true
-                        Layout.preferredHeight: mySubmitPrompt.shouldLoadModel ? 15 : 0
+                        Layout.preferredHeight: (mySubmitPrompt.shouldLoadModel
+                                                ||  window.isProgressBarCompleting) ? 15 : 0
                         clip: true   // hides bar content when height = 0
 
                         Behavior on Layout.preferredHeight {
@@ -1819,11 +1835,19 @@ Window {
                             value: 0
                             property bool allowAnimation: false // disable by default to prevent initial animation
 
+                            opacity: window.isProgressBarCompleting
+                                    && !mySubmitPrompt.shouldLoadModel ? 0 : 1
+                            Behavior on opacity {
+                                NumberAnimation {
+                                    duration: 500
+                                    easing.type: Easing.InQuad
+                                }
+                            }
+
                             onVisibleChanged: {
-                                if (visible) {
+                                if (visible && mySubmitPrompt.shouldLoadModel) {
                                     allowAnimation = false
                                     value = 0
-                                    //allowAnimation = true
                                 }
                             }
 
@@ -1853,7 +1877,7 @@ Window {
         }
 
         // ═══════════════════════════════════════════════════════════════
-        // Input Area
+        // Row 4: Input Area
         // ═══════════════════════════════════════════════════════════════
         RowLayout {
             id: inputRow
@@ -1871,10 +1895,7 @@ Window {
                 id: button_load_rectangle
                 Layout.fillHeight: true
                 Layout.preferredWidth: parent.width * 0.42
-                color: theme.bgSecondary
-                radius: theme.standardRadius
-                border.color: theme.borderInactive
-                border.width: theme.borderWidth
+                color: theme.bgPrimary
 
                 RowLayout {
                     id: rowLayout
