@@ -6,8 +6,8 @@
 [![Platforms](https://img.shields.io/badge/Platforms-FRDM_i.MX_8M_Plus_|_FRDM_i.MX_95-blue?logo=arm&logoColor=white)](https://www.nxp.com/products/processors-and-microcontrollers/arm-processors/i-mx-applications-processors:IMX_HOME)
 [![Language](https://img.shields.io/badge/C++-00599C?logo=cplusplus)](https://isocpp.org/)
 [![AI/ML](https://img.shields.io/badge/AI/ML-GenAI-orange?logo=openai&logoColor=white)](https://www.nxp.com/docs/en/user-guide/UG10166.pdf)
-[![Python](https://img.shields.io/badge/eIQ_AAF_Connector-2.0.0-green.svg?logo=python&logoColor=white)]()
-[![BSP](https://img.shields.io/badge/BSP_>=-LF6.18.2--1.0.0-purple.svg?logo=linux&logoColor=white)](https://www.nxp.com/design/design-center/software/embedded-software/i-mx-software/embedded-linux-for-i-mx-applications-processors:IMXLINUX)
+[![Python](https://img.shields.io/badge/eIQ_AAF_Connector-2.1.0-green.svg?logo=python&logoColor=white)]()
+[![BSP](https://img.shields.io/badge/BSP_>=-LF6.18.20--2.0.0-purple.svg?logo=linux&logoColor=white)](https://www.nxp.com/design/design-center/software/embedded-software/i-mx-software/embedded-linux-for-i-mx-applications-processors:IMXLINUX)
 
 ---
 
@@ -94,8 +94,8 @@ graph LR
 ### 💻 Software
 
 - Ara240 Runtime SDK installed on target
-- [Embedded Linux for i.MX](https://www.nxp.com/design/design-center/software/embedded-software/i-mx-software/embedded-linux-for-i-mx-applications-processors:IMXLINUX) (>= LF6.18.2_1.0.0)
-- eIQ AAF Connector v2.0.0
+- [Embedded Linux for i.MX](https://www.nxp.com/design/design-center/software/embedded-software/i-mx-software/embedded-linux-for-i-mx-applications-processors:IMXLINUX) (>= LF6.18.20_2.0.0)
+- eIQ AAF Connector v2.1.0
 - `nxp/Qwen2.5-VL-7B-Instruct-Ara240` (model.dvm)
 - [vlm-edge-studio.deb](https://www.nxp.com/webapp/sps/download/license.jsp?colCode=VLM-EDGE-STUDIO_1.0.0&appType=file1&DOWNLOAD_ID=null) (optional, build instructions available in this repository)
 
