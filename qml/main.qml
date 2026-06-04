@@ -769,10 +769,8 @@ Window {
             Layout.preferredHeight: theme.titleHeight
             Layout.maximumHeight: theme.titleHeight
 	        Layout.minimumHeight:   theme.titleHeight
-            Layout.leftMargin: 5
             Layout.rightMargin: theme.standardMargin
-	        //Layout.maximumWidth: window.width
-	        //Layout.topMargin: 0
+            Layout.leftMargin: 5
             spacing: theme.standardMargin
 
             Image {
@@ -876,12 +874,16 @@ Window {
                 radius: theme.standardRadius
                 border.color: theme.borderInactive
                 border.width: theme.borderWidth
+                clip: true
+                layer.enabled: true
 
                 // Image display (for image mode or captured frames)
                 Image {
                     id: imageDisplay
                     anchors.fill: parent
                     fillMode: Image.PreserveAspectFit
+                    z: 2
+
                     visible: analysisMode === "image" && mediaSource === "file"
                     source: {
                         if (analysisMode === "image" && mediaSource === "file"
@@ -982,7 +984,6 @@ Window {
                 GstTestGLSink {
                     id: video_1
                     anchors.fill: parent
-                    anchors.centerIn: parent
                     patternType: 0
                     animate: true
                     visible: analysisMode === "video" || mediaSource === "camera"
@@ -1460,9 +1461,10 @@ Window {
                                     return 18
                                 }
 
+                                Layout.fillWidth: true
+                                Layout.alignment: Qt.AlignVCenter
                                 font.family: "Poppins"
                                 font.italic: true
-                                anchors.verticalCenter: parent.verticalCenter
 
                                 // Calculate available width
                                 width: {
@@ -1641,28 +1643,6 @@ Window {
                                          && !mySubmitPrompt.shouldLoadModel
                                          && mySubmitPrompt.availableModelNames().length > 0
 
-                                /*
-                                Component.onCompleted: {
-                                    console.log("[QML] ModelSelector initialized, models:",
-                                                mySubmitPrompt.availableModelNames())
-                                }
-
-                                onActivated: function(index) {
-                                    if (index !== mySubmitPrompt.selectedModelIndex)
-                                        mySubmitPrompt.setCurrentModelIndex(index)
-                                }
-
-                                Connections {
-                                    target: mySubmitPrompt
-                                    function onAvailableModelsChanged() {
-                                        modelSelector.model = mySubmitPrompt.availableModelNames()
-                                    }
-                                    function onCurrentModelIndexChanged() {
-                                        if (modelSelector.currentIndex !== mySubmitPrompt.selectedModelIndex)
-                                            modelSelector.currentIndex = mySubmitPrompt.selectedModelIndex
-                                    }
-                                }*/
-
                                 onCurrentIndexChanged: {
                                     console.log("[QML] Model selector currentIndex changed to:",
                                                 currentIndex)
@@ -1693,9 +1673,6 @@ Window {
                                         modelSelector.currentIndex = mySubmitPrompt.selectedModelIndex
                                     }
                                 }
-
-
-
                             }
 
                             // Endpoint label + selector
@@ -2328,6 +2305,7 @@ Window {
                                 && !window.isProcessing
                                 && !mySubmitPrompt.isProcessingInference
                                 && !mySubmitPrompt.isLoadingMedia
+                                && mySubmitPrompt.isModelLoaded
                         opacity: enabled ? 1.0 : 0.3
 
                         Keys.onReturnPressed: {
@@ -2358,17 +2336,10 @@ Window {
 
                     contentItem: Image {
                         anchors.fill: parent
-                        //anchors.margins: 10
                         source: "../images/submit.svg"
                         fillMode: Image.PreserveAspectFit
                         smooth: true
                         antialiasing: true
-                        /*opacity: submitButton.enabled
-                                ? (submitButton.hovered ? 0.7 : 1.0)
-                                : 0.3
-                        Behavior on opacity {
-                            NumberAnimation { duration: theme.animationFast }
-                        }*/
                     }
 
                     scale: submitButton.enabled && submitButton.hovered ? 1.05 : 1.0
