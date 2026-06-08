@@ -1696,6 +1696,7 @@ Window {
                                          && !mySubmitPrompt.shouldLoadModel
                                          && !mySubmitPrompt.isProcessingInference
                                 onActivated: function(index) {
+                                    console.log("[QML] Endpoint selector changed to index:", index, currentText) 
                                     mySubmitPrompt.initializeEndpoint(index, currentText)
                                 }
                             }
@@ -1869,7 +1870,7 @@ Window {
 
             // Control buttons
             Rectangle {
-                id: button_load_rectangle
+                id: mediaControllerBar
                 Layout.fillHeight: true
                 Layout.preferredWidth: parent.width * 0.42
                 color: theme.bgPrimary
@@ -1877,14 +1878,14 @@ Window {
                 RowLayout {
                     id: rowLayout
                     anchors.fill: parent
-                    anchors.margins: 8
-                    spacing: 4
+                    anchors.leftMargin:  theme.standardMargin
+                    anchors.rightMargin: theme.standardMargin
 
                     // LOAD BUTTON - Opens file dialog
                     Button {
                         id: load_button
-                        Layout.fillWidth:  true
                         Layout.fillHeight: true
+                        Layout.fillWidth: true
                         display: AbstractButton.IconOnly
                         enabled: mySubmitPrompt.isModelLoaded
                                 && !mySubmitPrompt.isProcessingInference
@@ -1892,7 +1893,9 @@ Window {
                         opacity: enabled ? 1.0 : 0.3
                         background: Rectangle { color: "transparent" }
                         contentItem: Image {
-                            anchors.fill: parent
+                            anchors.centerIn: parent
+                            width: parent.width * 0.72
+                            height: parent.width * 0.72
                             source: load_button.down ? "images/load_pressed.svg" : "images/load_unpressed.svg"
                             fillMode: Image.PreserveAspectFit
                             smooth: true
@@ -1982,8 +1985,8 @@ Window {
                     // IMAGE LOAD
                     Button {
                         id: image_button
-                        Layout.fillWidth:  true
                         Layout.fillHeight: true
+                        Layout.fillWidth: true
                         display: AbstractButton.IconOnly
                         enabled: mySubmitPrompt.isModelLoaded
                                 && !mySubmitPrompt.isProcessingInference
@@ -1991,7 +1994,9 @@ Window {
                         opacity: enabled ? 1.0 : 0.3
                         background: Rectangle { color: "transparent" }
                         contentItem: Image {
-                            anchors.fill: parent
+                            anchors.centerIn: parent
+                            width: parent.width * 0.72
+                            height: parent.width * 0.72
                             source: "images/image.svg"
                             fillMode: Image.PreserveAspectFit
                             smooth: true
@@ -2034,8 +2039,8 @@ Window {
                     // VIDEO LOAD
                     Button {
                         id: video_button
-                        Layout.fillWidth:  true
                         Layout.fillHeight: true
+                        Layout.fillWidth: true
                         display: AbstractButton.IconOnly
                         enabled: mySubmitPrompt.isModelLoaded
                                 && !mySubmitPrompt.isProcessingInference
@@ -2043,7 +2048,9 @@ Window {
                         opacity: enabled ? 1.0 : 0.3
                         background: Rectangle { color: "transparent" }
                         contentItem: Image {
-                            anchors.fill: parent
+                            anchors.centerIn: parent
+                            width: parent.width * 0.72
+                            height: parent.width * 0.72
                             source: "images/video.svg"
                             fillMode: Image.PreserveAspectFit
                             smooth: true
@@ -2089,8 +2096,8 @@ Window {
                     // CAMERA BUTTON - Activates live camera
                     Button {
                         id: camera_button
-                        Layout.fillWidth:  true
                         Layout.fillHeight: true
+                        Layout.fillWidth: true
                         display: AbstractButton.IconOnly
                         enabled: mySubmitPrompt.isModelLoaded
                                 && !mySubmitPrompt.isProcessingInference
@@ -2102,7 +2109,9 @@ Window {
                             radius: 8
                         }
                         contentItem: Image {
-                            anchors.fill: parent
+                            anchors.centerIn: parent
+                            width: parent.width * 0.72
+                            height: parent.width * 0.72
                             source: "images/camera.svg"
                             fillMode: Image.PreserveAspectFit
                             smooth: true
@@ -2176,8 +2185,8 @@ Window {
                     // CAPTURE BUTTON - Context-aware: records video OR captures frame
                     Button {
                         id: capture_button
-                        Layout.fillWidth:  true
                         Layout.fillHeight: true
+                        Layout.fillWidth: true
                         display: AbstractButton.IconOnly
                         // Reuse existing flags - button disabled when any indicator is showing
                         enabled: mySubmitPrompt.isModelLoaded
@@ -2188,7 +2197,9 @@ Window {
                         opacity: enabled ? 1.0 : 0.3
                         background: Rectangle { color: "transparent" }
                         contentItem: Image {
-                            anchors.fill: parent
+                            anchors.centerIn: parent
+                            width: parent.width * 0.72
+                            height: parent.width * 0.72
                             source: capture_button.down ? "images/capture_pressed.svg" : "images/capture_unpressed.svg"
                             fillMode: Image.PreserveAspectFit
                             smooth: true
@@ -2269,47 +2280,82 @@ Window {
                 id: promptRow
                 Layout.fillWidth: true
                 Layout.fillHeight: true
+                anchors.leftMargin:  theme.standardMargin
+                anchors.rightMargin: theme.standardMargin
                 spacing: theme.standardMargin
 
-                Rectangle {
-                    id: inputPromptContainer
-                    Layout.fillWidth:  true
-                    Layout.fillHeight: true
-                    color: theme.bgSecondary
-                    radius: theme.standardRadius
-                    border.color: inputPrompt.activeFocus
-                                ? theme.accentPrimary
-                                : theme.borderInactive
-                    border.width: theme.borderWidth
+                TextField {
+                    id: inputPrompt
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: theme.inputHeight
 
-                    Behavior on border.color {
-                        ColorAnimation { duration: theme.animationFast }
+                    placeholderText: "Enter your analysis prompt..."
+                    placeholderTextColor: theme.textSecondary
+                    color: enabled ? theme.textPrimary : theme.textSecondary
+                    selectedTextColor: "#EBE7DD"
+                    selectionColor: "#0068DF"
+                    text: mySubmitPrompt.userPromptText
+                    focus: true
+
+                    font.pixelSize: theme.fontLarge
+                    font.family: "Poppins"
+                    wrapMode: TextInput.WordWrap
+                    padding: 5
+                    rightPadding: 5
+                    leftPadding: 5
+                    bottomPadding: 5
+                    topPadding: 5
+                    verticalAlignment: TextInput.AlignVCenter
+
+                    cursorDelegate: Rectangle {
+                        id: cursor
+                        width: 2
+                        height: inputPrompt.font.pixelSize + 6
+                        color: theme.accentPrimary
+                        visible: inputPrompt.cursorVisible && inputPrompt.activeFocus
+                        radius: 1
+
+                        SequentialAnimation on opacity {
+                            running: inputPrompt.activeFocus
+                            loops: Animation.Infinite
+                            NumberAnimation { from: 1.0; to: 0.0; duration: 600; easing.type: Easing.InOutQuad }
+                            NumberAnimation { from: 0.0; to: 1.0; duration: 600; easing.type: Easing.InOutQuad }
+                        }
+
+                        // Reset opacity when focus is lost
+                        onVisibleChanged: {
+                            if (!visible) opacity = 1.0
+                        }
                     }
-                    
-                    TextInput {
-                        id: inputPrompt
-                        anchors.fill: parent
-                        anchors.leftMargin:  theme.standardMargin
-                        anchors.rightMargin: theme.standardMargin
-                        anchors.topMargin:   theme.standardMargin
-                        anchors.bottomMargin: theme.standardMargin
-                        color: theme.textPrimary
-                        selectedTextColor: "#EBE7DD"
-                        selectionColor: "#0068DF"
-                        text: mySubmitPrompt.userPromptText
-                        font.pixelSize: theme.fontLarge
-                        font.family: "Poppins"
-                        wrapMode: Text.WordWrap
-                        verticalAlignment: TextInput.AlignVCenter
-                        enabled: !window.isRecording
-                                && !window.isProcessing
-                                && !mySubmitPrompt.isProcessingInference
-                                && !mySubmitPrompt.isLoadingMedia
-                                && mySubmitPrompt.isModelLoaded
-                        opacity: enabled ? 1.0 : 0.3
 
-                        Keys.onReturnPressed: {
-                            mySubmitPrompt.setUserPromptText(inputPrompt.text)
+                    enabled: !window.isRecording
+                            && !window.isProcessing
+                            && !mySubmitPrompt.isProcessingInference
+                            && !mySubmitPrompt.isLoadingMedia
+                            && mySubmitPrompt.isModelLoaded
+                    opacity: enabled ? 1.0 : 0.5
+
+                    background: Rectangle {
+                        color: theme.bgSecondary
+                        radius: theme.standardRadius
+                        border.color: inputPrompt.activeFocus ? theme.accentPrimary : theme.borderInactive
+                        border.width: theme.borderWidth
+
+                        Behavior on border.color {
+                            ColorAnimation {
+                                duration: theme.animationFast
+                            }
+                        }
+                    }
+
+                    Keys.onReturnPressed: {
+                        mySubmitPrompt.setUserPromptText(inputPrompt.text)
+                    }
+
+                    Component.onCompleted: {
+                        if (inputPrompt.enabled) {
+                            console.log("force active focus")
+                            inputPrompt.forceActiveFocus()
                         }
                     }
                 }

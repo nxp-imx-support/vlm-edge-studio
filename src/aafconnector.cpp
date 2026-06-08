@@ -504,34 +504,34 @@ QString AAFConnector::formatMetrics(const QJsonObject &metrics) const
     lines.reserve(6);
 
     // Time to first token (TTFT)
-    if (modelMetrics.contains("llm_first_infer_duration")) {
-        const double ttft = modelMetrics["llm_first_infer_duration"]
+    if (modelMetrics.contains("ttft")) {
+        const double ttft = modelMetrics["ttft"]
                                 .toDouble();  // Already in seconds
         lines << QStringLiteral("TTFT: %1 s").arg(ttft, 0, 'f', 2);
     }
 
     // Tokens per second
-    if (modelMetrics.contains("llm_average_token_per_second")) {
-        const double tps = modelMetrics["llm_average_token_per_second"].toDouble();
+    if (modelMetrics.contains("tps")) {
+        const double tps = modelMetrics["tps"].toDouble();
         lines << QStringLiteral("TPS: %1 tok/s").arg(tps, 0, 'f', 1);
     }
 
     // Total generation time
-    if (modelMetrics.contains("llm_token_generation_time")) {
-        const double genTime = modelMetrics["llm_token_generation_time"].toDouble();
+    if (modelMetrics.contains("generation_time")) {
+        const double genTime = modelMetrics["generation_time"].toDouble();
         lines << QStringLiteral("Inf. Time: %1 s").arg(genTime, 0, 'f', 1);
     }
 
     // Input tokens
-    if (modelMetrics.contains("input_token_num")) {
+    if (modelMetrics.contains("input_tokens")) {
         lines << QStringLiteral("Input: %1 tokens")
-                    .arg(modelMetrics["input_token_num"].toInt());
+                    .arg(modelMetrics["input_tokens"].toInt());
     }
 
     // Generated tokens
-    if (modelMetrics.contains("generated_token_num")) {
+    if (modelMetrics.contains("output_tokens")) {
         lines << QStringLiteral("Output: %1 tokens")
-                    .arg(modelMetrics["generated_token_num"].toInt());
+                    .arg(modelMetrics["output_tokens"].toInt());
     }
 
     return lines.join(" | ");
@@ -873,7 +873,7 @@ void AAFConnector::loadModel(const ModelInfo &modelInfo, const int &endpoint)
     QJsonObject payload;
     payload["name"] = modelInfo.name;
     payload["type"] = modelInfo.type;
-    payload["endpoint"] = endpoint;
+    payload["ara_endpoint"] = endpoint;
     payload["tool_calling"] = modelInfo.toolCalling;
 
     QJsonDocument doc(payload);
