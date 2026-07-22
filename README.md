@@ -3,7 +3,7 @@
 # VLM Edge Studio 🚀
 
 [![License badge](https://img.shields.io/badge/License-Proprietary-red)](./LICENSE)
-[![Platforms](https://img.shields.io/badge/Platforms-FRDM_i.MX_8M_Plus_|_FRDM_i.MX_95-blue?logo=arm&logoColor=white)](https://www.nxp.com/products/processors-and-microcontrollers/arm-processors/i-mx-applications-processors:IMX_HOME)
+[![Platforms](https://img.shields.io/badge/Platforms-FRDM_i.MX_8M_Plus_|_FRDM_i.MX_95_|_FRDM_i.MM_95_PRO-blue?logo=arm&logoColor=white)](https://www.nxp.com/products/processors-and-microcontrollers/arm-processors/i-mx-applications-processors:IMX_HOME)
 [![Language](https://img.shields.io/badge/C++-00599C?logo=cplusplus)](https://isocpp.org/)
 [![AI/ML](https://img.shields.io/badge/AI/ML-GenAI-orange?logo=openai&logoColor=white)](https://www.nxp.com/docs/en/user-guide/UG10166.pdf)
 [![Python](https://img.shields.io/badge/eIQ_AAF_Connector-2.1.0-green.svg?logo=python&logoColor=white)]()
@@ -75,6 +75,7 @@ graph LR
 | ----------------------------------------------------------------------------------------------------------- | :-------: |
 | [FRDM i.MX 8M Plus](https://www.nxp.com/design/design-center/development-boards-and-designs/FRDM-IMX8MPLUS) |     ✅     |
 | [FRDM i.MX 95](https://www.nxp.com/design/design-center/development-boards-and-designs/FRDM-IMX95)          |     ✅     |
+| [FRDM i.MX 95 PRO](https://www.nxp.com/design/design-center/development-boards-and-designs/FRDM-IMX95-PRO)  |     ✅     |
 
 ## 📋 Requirements
 
