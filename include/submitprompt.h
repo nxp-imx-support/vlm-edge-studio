@@ -18,6 +18,7 @@
 #include <QProcess>
 #include <QString>
 #include <QStringList>
+#include <QVariantMap>
 #include "aafconnector.h"
 
 namespace SubmitPromptConfig {
@@ -107,6 +108,11 @@ class SubmitPrompt : public QObject {
     Q_PROPERTY(QString downloadStatus READ downloadStatus NOTIFY downloadStatusChanged)
     Q_PROPERTY(bool hasDownloadError READ hasDownloadError NOTIFY hasDownloadErrorChanged)
 
+    // llm_params - loaded from server_config.json at startup
+    Q_PROPERTY(QVariantMap llmParams READ llmParams WRITE setLlmParams NOTIFY llmParamsChanged)
+    // defaultLlmParams - snapshot of config values; used by Reset button
+    Q_PROPERTY(QVariantMap defaultLlmParams READ defaultLlmParams CONSTANT)
+
 public:
     explicit SubmitPrompt(QObject* parent = nullptr);
     ~SubmitPrompt() override;
@@ -161,6 +167,8 @@ public:
     QString downloadStatus() const { return m_downloadStatus; }
     bool hasDownloadError() const {return m_hasDownloadError; }
     QStringList endpointNames() const;
+    QVariantMap llmParams() const;
+    QVariantMap defaultLlmParams() const;
 
 Q_SIGNALS:
     // Input/Output signals
@@ -199,6 +207,7 @@ Q_SIGNALS:
     void hasDownloadErrorChanged();
     void modelDownloadCompleted();
     void endpointNamesChanged();
+    void llmParamsChanged();
 
 public Q_SLOTS:
     // Setters
@@ -211,6 +220,7 @@ public Q_SLOTS:
     void setLoadModel(bool load);
     void setModelLoadProgress(int progress);
     void setLoadingMedia(bool progress);
+    void setLlmParams(const QVariantMap &params);
 
     // Internal setters
     void setProcessingInference(bool processing);
@@ -249,6 +259,8 @@ private:
     void setDownloadProgress(const int);
     void setDownloadStatus(const QString &status);
     void downloadNextModel();
+    void loadLlmParamsFromConfig(const QString &configPath);
+    void loadLlmParamsFromModelConfig(const QString &modelName);
 
     // Input/Output state
     QString m_userPromptText;
@@ -290,6 +302,9 @@ private:
     QStringList m_modelsToDownload;
     int m_currentDownloadIndex;
     QStringList m_endpointNames;
+
+    QVariantMap m_llmParams;
+    QVariantMap m_defaultLlmParams;
 
     // Backend connector
     AAFConnector* m_aafConnector;

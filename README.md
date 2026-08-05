@@ -153,12 +153,41 @@ graph LR
 
     > **NOTE:** Make sure Ara240's runtime service is up and running. You can check with this command: `systemctl status rt-sdk-ara2.service --no-pager -l`
 
-2. Once the launcher is showed in the screen, click on the `LOAD` button. The model will start to load; once ready, you can prompt the LLM and submit.
+2. Once the launcher is showed on screen, click on the `LOAD` button. The model will start loading; once ready, you can type a prompt and click Submit.
 
 <center>
 <br><img src="./data/vlm-edge-studio-video.png" width=720>
 <br><i>Figure 1. VLM Edge Studio.</i>
 </center>
+
+## ⚙️ Model Configuration
+
+VLM generation parameters can be adjusted at any time without reloading the model. Click the **gear icon (⚙)** in the model selector bar to open the **Model Configuration** popup.
+
+<center>
+<br><img src="./data/model_gear_conf.png" width=720>
+<br><i>Figure 2. Gear button used to open the Model Configuration popup.</i>
+</center>
+
+<center>
+<br><img src="./data/model_conf.png" width=720>
+<br><i>Figure 3. Model Configuration popup with stepper controls.</i>
+</center>
+
+### Parameters
+
+| Parameter | Range | Step | Description |
+|---|---|---|---|
+| **Max Tokens** | 1 – 4096 | 1 | Maximum number of tokens the model will generate per response. |
+| **Temperature** | 0.0 – 1.0 | 0.1 | Controls output randomness. Lower values produce more focused and deterministic responses; higher values increase creativity and diversity. |
+| **Top K** | 0 – 100 | 1 | Limits sampling to the K most probable next tokens. Set to `0` to disable. |
+| **Top P** | 0.0 – 1.0 | 0.1 | Nucleus sampling threshold. Only tokens whose cumulative probability reaches this value are considered. |
+
+### Controls
+
+- **Text field** — you can type a value directly or use `[<]` / `[>]` stepper buttons to increment or decrement the value.
+- **Reset** — restores all fields to the default values for the currently selected model. Defaults are read from `server_config.json` at startup and overlaid with per-model values from `generation_config.json` when a model is selected. When a model is ejected, the parameters return to the global `server_config.json` baseline.
+- **Apply** — commits the current values to the backend. The button is disabled until all four fields contain valid values. Changes will take effect on the next prompt submission.
 
 
 ## Limitations

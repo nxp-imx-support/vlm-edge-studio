@@ -29,7 +29,7 @@ Window {
     // CONFIGURATION
     // ═══════════════════════════════════════════════════════════════
     readonly property bool cancelSupport: false
-    readonly property bool configSupport: false
+    readonly property bool configSupport: true
     readonly property string defaultImagePath: "/usr/share/vlm-edge-studio/assets/images/image.jpg"
     readonly property string defaultVideoPath: "/usr/share/vlm-edge-studio/assets/videos/video.mp4"
     property bool isProgressBarCompleting: false
@@ -49,6 +49,7 @@ Window {
         readonly property color textSecondary: "#98989D"
         readonly property color borderActive: "#0A84FF"
         readonly property color borderInactive: "#38383A"
+        readonly property color borderPopup: "#48484A"
 
         // UI Dimensions
         readonly property int brandingHeight: 10
@@ -1641,7 +1642,7 @@ Window {
                                 enabled: !mySubmitPrompt.isModelLoaded
                                          && !mySubmitPrompt.isProcessingInference
                                          && !mySubmitPrompt.shouldLoadModel
-                                         && mySubmitPrompt.availableModelNames().length > 0
+                                         && mySubmitPrompt.selectedModelIndex >= 0
 
                                 onCurrentIndexChanged: {
                                     console.log("[QML] Model selector currentIndex changed to:",
@@ -1715,7 +1716,6 @@ Window {
                                 enabled: !mySubmitPrompt.isModelLoaded
                                          && !mySubmitPrompt.shouldLoadModel
                                          && mySubmitPrompt.selectedModelIndex >= 0
-                                         && mySubmitPrompt.availableModelNames().length > 0
                                 onClicked: {
                                     progressBarModel.value = 0
                                     mySubmitPrompt.setLoadModel(true)
@@ -1740,9 +1740,7 @@ Window {
                                 Layout.preferredHeight: 36
                                 Layout.alignment: Qt.AlignVCenter
                                 visible: configSupport
-                                enabled: !mySubmitPrompt.isModelLoaded
-                                         && !mySubmitPrompt.shouldLoadModel
-                                         && !mySubmitPrompt.isProcessingInference
+                                enabled: !mySubmitPrompt.isProcessingInference
                                 opacity: enabled ? 1.0 : 0.3
                                 hoverEnabled: true
                                 onClicked: modelConfigPopup.open()
@@ -2440,18 +2438,45 @@ Window {
     // ═══════════════════════════════════════════════════════════════
     Popup {
         id: modelConfigPopup
-        width: 380
-        height: 320
+        width: 430
+        height: 360
         modal: true
         focus: true
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
-        // Anchor to the gear button dynamically
         x: (window.width - width) / 2
         y: (window.height - height) / 2
 
+        // Working copy edited by the user; committed to backend only on Apply
+        property var pendingParams: ({})
+
+        // True only when every visible field holds an acceptable value
+        property bool allValid: fieldMaxTokens.acceptableInput &&
+                                fieldTemperature.fieldValid &&
+                                fieldTopK.acceptableInput &&
+                                fieldTopP.fieldValid
+
+        onOpened: {
+            pendingParams = Object.assign({}, mySubmitPrompt.llmParams)
+            // Reset debounced valid flags so the popup opens without red borders
+            fieldTemperature.fieldValid = true
+            fieldTopP.fieldValid = true
+        }
+
+        // Refresh all TextField texts when pendingParams is replaced (Reset or Open)
+        onPendingParamsChanged: {
+            if (pendingParams["generate_max_tokens"] !== undefined)
+                fieldMaxTokens.text = pendingParams["generate_max_tokens"].toString()
+            if (pendingParams["temperature"] !== undefined)
+                fieldTemperature.text = pendingParams["temperature"].toString()
+            if (pendingParams["top_k"] !== undefined)
+                fieldTopK.text = pendingParams["top_k"].toString()
+            if (pendingParams["top_p"] !== undefined)
+                fieldTopP.text = pendingParams["top_p"].toString()
+        }
+
         background: Rectangle {
             color: theme.bgSecondary
-            border.color: theme.accentPrimary
+            border.color: theme.borderPopup
             border.width: theme.borderWidth
             radius: theme.standardRadius
         }
@@ -2459,10 +2484,10 @@ Window {
         ColumnLayout {
             anchors.fill: parent
             anchors.margins: 20
-            spacing: 16
+            spacing: 14
 
             Text {
-                text: "⚙  Model Configuration"
+                text: "Model Configuration"
                 color: theme.textPrimary
                 font.pixelSize: theme.fontSmall
                 font.family: "Poppins"
@@ -2471,49 +2496,387 @@ Window {
 
             Rectangle { Layout.fillWidth: true; height: 1; color: theme.borderInactive }
 
-            Repeater {
-                model: [
-                    { label: "Temperature:",    slider: "temperatureSlider",   from: 0.0,  to: 2.0,  step: 0.1,  decimals: 1, prop: "temperature",   def: 0.7,  w: 30 },
-                    { label: "Max Tokens:",     slider: "maxTokensSlider",     from: 64,   to: 4096, step: 64,   decimals: 0, prop: "maxTokens",     def: 512,  w: 40 },
-                    { label: "Context Length:", slider: "contextLengthSlider", from: 512,  to: 8192, step: 512,  decimals: 0, prop: "contextLength", def: 2048, w: 40 }
-                ]
-                // For simplicity keep individual sliders below
-            }
-
+            // Max Tokens row
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 10
-                Text { text: "Temperature:";    color: theme.textSecondary; font.pixelSize: theme.fontMicro; font.family: "Poppins"; Layout.preferredWidth: 130 }
-                Slider { id: temperatureSlider;    Layout.fillWidth: true; from: 0.0; to: 2.0; stepSize: 0.1;  value: mySubmitPrompt.temperature    !== undefined ? mySubmitPrompt.temperature    : 0.7;  onMoved: mySubmitPrompt.temperature    = value }
-                Text { text: temperatureSlider.value.toFixed(1);    color: theme.accentPrimary; font.pixelSize: theme.fontMicro; font.family: "Poppins"; Layout.preferredWidth: 30 }
+                Text {
+                    text: "Max Tokens (1-4096):"
+                    color: theme.textSecondary
+                    font.pixelSize: theme.fontMicro
+                    font.family: "Poppins"
+                    Layout.preferredWidth: 180
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 0
+                    Button {
+                        id: maxTokDecBtn
+                        width: 26; height: 32
+                        text: "<"
+                        font.pixelSize: theme.fontMicro; font.family: "Poppins"
+                        onClicked: {
+                            var v = Math.max(1, (parseInt(fieldMaxTokens.text) || 1) - 1)
+                            fieldMaxTokens.text = v.toString()
+                            var m = Object.assign({}, modelConfigPopup.pendingParams)
+                            m["generate_max_tokens"] = v
+                            modelConfigPopup.pendingParams = m
+                        }
+                        background: Rectangle {
+                            color: maxTokDecBtn.pressed ? theme.accentPrimary : maxTokDecBtn.hovered ? theme.bgSecondary : theme.bgTertiary
+                            radius: theme.smallRadius; border.color: theme.borderInactive; border.width: theme.borderWidth
+                        }
+                        contentItem: Text { text: maxTokDecBtn.text; font: maxTokDecBtn.font; color: theme.textSecondary; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                    }
+                    TextField {
+                        id: fieldMaxTokens
+                        Layout.fillWidth: true; height: 32
+                        color: theme.textPrimary; font.pixelSize: theme.fontMicro; font.family: "Poppins"
+                        horizontalAlignment: Text.AlignHCenter
+                        selectionColor: theme.accentPrimary
+                        selectedTextColor: theme.bgPrimary
+                        selectByMouse: true
+                        cursorDelegate: Rectangle { color: theme.accentPrimary; width: 2; radius: 1 }
+                        text: modelConfigPopup.pendingParams["generate_max_tokens"] !== undefined ? modelConfigPopup.pendingParams["generate_max_tokens"].toString() : ""
+                        validator: IntValidator { bottom: 1; top: 4096 }
+                        inputMethodHints: Qt.ImhDigitsOnly
+                        background: Rectangle {
+                            color: theme.bgTertiary
+                            border.color: !fieldMaxTokens.acceptableInput ? "#FF453A" : fieldMaxTokens.activeFocus ? theme.accentPrimary : theme.borderInactive
+                            border.width: theme.borderWidth
+                            Behavior on border.color { ColorAnimation { duration: theme.animationFast } }
+                        }
+                        onTextEdited: {
+                            if (!acceptableInput) return
+                            var m = Object.assign({}, modelConfigPopup.pendingParams)
+                            m["generate_max_tokens"] = parseInt(text)
+                            modelConfigPopup.pendingParams = m
+                        }
+                        onEditingFinished: {
+                            if (acceptableInput) {
+                                var m = Object.assign({}, modelConfigPopup.pendingParams)
+                                m["generate_max_tokens"] = parseInt(text)
+                                modelConfigPopup.pendingParams = m
+                            }
+                        }
+                    }
+                    Button {
+                        id: maxTokIncBtn
+                        width: 26; height: 32
+                        text: ">"
+                        font.pixelSize: theme.fontMicro; font.family: "Poppins"
+                        onClicked: {
+                            var v = Math.min(4096, (parseInt(fieldMaxTokens.text) || 0) + 1)
+                            fieldMaxTokens.text = v.toString()
+                            var m = Object.assign({}, modelConfigPopup.pendingParams)
+                            m["generate_max_tokens"] = v
+                            modelConfigPopup.pendingParams = m
+                        }
+                        background: Rectangle {
+                            color: maxTokIncBtn.pressed ? theme.accentPrimary : maxTokIncBtn.hovered ? theme.bgSecondary : theme.bgTertiary
+                            radius: theme.smallRadius; border.color: theme.borderInactive; border.width: theme.borderWidth
+                        }
+                        contentItem: Text { text: maxTokIncBtn.text; font: maxTokIncBtn.font; color: theme.textSecondary; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                    }
+                }
             }
 
+            // Temperature row
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 10
-                Text { text: "Max Tokens:";     color: theme.textSecondary; font.pixelSize: theme.fontMicro; font.family: "Poppins"; Layout.preferredWidth: 130 }
-                Slider { id: maxTokensSlider;      Layout.fillWidth: true; from: 64;  to: 4096; stepSize: 64;  value: mySubmitPrompt.maxTokens     !== undefined ? mySubmitPrompt.maxTokens     : 512;  onMoved: mySubmitPrompt.maxTokens     = value }
-                Text { text: maxTokensSlider.value.toFixed(0);     color: theme.accentPrimary; font.pixelSize: theme.fontMicro; font.family: "Poppins"; Layout.preferredWidth: 40 }
+                Text {
+                    text: "Temperature (0.0-1.0):"
+                    color: theme.textSecondary; font.pixelSize: theme.fontMicro; font.family: "Poppins"
+                    Layout.preferredWidth: 180
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 0
+                    Button {
+                        id: tempDecBtn
+                        width: 26; height: 32; text: "<"
+                        font.pixelSize: theme.fontMicro; font.family: "Poppins"
+                        onClicked: {
+                            var v = Math.round((parseFloat(fieldTemperature.text || "0") - 0.1) * 10) / 10
+                            v = Math.max(0.0, Math.min(1.0, v))
+                            fieldTemperature.text = v.toFixed(1)
+                            fieldTemperature.fieldValid = true
+                            var m = Object.assign({}, modelConfigPopup.pendingParams)
+                            m["temperature"] = v
+                            modelConfigPopup.pendingParams = m
+                        }
+                        background: Rectangle { color: tempDecBtn.pressed ? theme.accentPrimary : tempDecBtn.hovered ? theme.bgSecondary : theme.bgTertiary; radius: theme.smallRadius; border.color: theme.borderInactive; border.width: theme.borderWidth }
+                        contentItem: Text { text: tempDecBtn.text; font: tempDecBtn.font; color: theme.textSecondary; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                    }
+                    TextField {
+                        id: fieldTemperature
+                        Layout.fillWidth: true; height: 32
+                        color: theme.textPrimary; font.pixelSize: theme.fontMicro; font.family: "Poppins"
+                        horizontalAlignment: Text.AlignHCenter
+                        selectionColor: theme.accentPrimary
+                        selectedTextColor: theme.bgPrimary
+                        selectByMouse: true
+                        cursorDelegate: Rectangle { color: theme.accentPrimary; width: 2; radius: 1 }
+                        text: modelConfigPopup.pendingParams["temperature"] !== undefined ? modelConfigPopup.pendingParams["temperature"].toString() : ""
+                        validator: RegularExpressionValidator { regularExpression: /^(0(\.\d{0,2})?|\.\d{1,2}|1(\.0{0,2})?)$/ }
+                        inputMethodHints: Qt.ImhFormattedNumbersOnly
+                        property bool fieldValid: true
+                        Timer {
+                            id: tempDebounce; interval: 600; repeat: false
+                            onTriggered: {
+                                fieldTemperature.fieldValid = fieldTemperature.acceptableInput
+                                if (fieldTemperature.acceptableInput) {
+                                    var m = Object.assign({}, modelConfigPopup.pendingParams)
+                                    m["temperature"] = parseFloat(fieldTemperature.text)
+                                    modelConfigPopup.pendingParams = m
+                                }
+                            }
+                        }
+                        background: Rectangle {
+                            color: theme.bgTertiary
+                            border.color: !fieldTemperature.fieldValid ? "#FF453A" : fieldTemperature.activeFocus ? theme.accentPrimary : theme.borderInactive
+                            border.width: theme.borderWidth
+                            Behavior on border.color { ColorAnimation { duration: theme.animationFast } }
+                        }
+                        onTextEdited: tempDebounce.restart()
+                        onEditingFinished: {
+                            tempDebounce.stop()
+                            fieldValid = acceptableInput
+                            if (acceptableInput) {
+                                var m = Object.assign({}, modelConfigPopup.pendingParams)
+                                m["temperature"] = parseFloat(text)
+                                modelConfigPopup.pendingParams = m
+                            }
+                        }
+                    }
+                    Button {
+                        id: tempIncBtn
+                        width: 26; height: 32; text: ">"
+                        font.pixelSize: theme.fontMicro; font.family: "Poppins"
+                        onClicked: {
+                            var v = Math.round((parseFloat(fieldTemperature.text || "0") + 0.1) * 10) / 10
+                            v = Math.max(0.0, Math.min(1.0, v))
+                            fieldTemperature.text = v.toFixed(1)
+                            fieldTemperature.fieldValid = true
+                            var m = Object.assign({}, modelConfigPopup.pendingParams)
+                            m["temperature"] = v
+                            modelConfigPopup.pendingParams = m
+                        }
+                        background: Rectangle { color: tempIncBtn.pressed ? theme.accentPrimary : tempIncBtn.hovered ? theme.bgSecondary : theme.bgTertiary; radius: theme.smallRadius; border.color: theme.borderInactive; border.width: theme.borderWidth }
+                        contentItem: Text { text: tempIncBtn.text; font: tempIncBtn.font; color: theme.textSecondary; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                    }
+                }
             }
 
+            // Top-K row
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 10
-                Text { text: "Context Length:"; color: theme.textSecondary; font.pixelSize: theme.fontMicro; font.family: "Poppins"; Layout.preferredWidth: 130 }
-                Slider { id: contextLengthSlider;  Layout.fillWidth: true; from: 512; to: 8192; stepSize: 512; value: mySubmitPrompt.contextLength !== undefined ? mySubmitPrompt.contextLength : 2048; onMoved: mySubmitPrompt.contextLength = value }
-                Text { text: contextLengthSlider.value.toFixed(0); color: theme.accentPrimary; font.pixelSize: theme.fontMicro; font.family: "Poppins"; Layout.preferredWidth: 40 }
+                Text {
+                    text: "Top K (0-100):"
+                    color: theme.textSecondary; font.pixelSize: theme.fontMicro; font.family: "Poppins"
+                    Layout.preferredWidth: 180
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 0
+                    Button {
+                        id: topKDecBtn
+                        width: 26; height: 32; text: "<"
+                        font.pixelSize: theme.fontMicro; font.family: "Poppins"
+                        onClicked: {
+                            var v = Math.max(0, (parseInt(fieldTopK.text) || 0) - 1)
+                            fieldTopK.text = v.toString()
+                            var m = Object.assign({}, modelConfigPopup.pendingParams)
+                            m["top_k"] = v
+                            modelConfigPopup.pendingParams = m
+                        }
+                        background: Rectangle { color: topKDecBtn.pressed ? theme.accentPrimary : topKDecBtn.hovered ? theme.bgSecondary : theme.bgTertiary; radius: theme.smallRadius; border.color: theme.borderInactive; border.width: theme.borderWidth }
+                        contentItem: Text { text: topKDecBtn.text; font: topKDecBtn.font; color: theme.textSecondary; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                    }
+                    TextField {
+                        id: fieldTopK
+                        Layout.fillWidth: true; height: 32
+                        color: theme.textPrimary; font.pixelSize: theme.fontMicro; font.family: "Poppins"
+                        horizontalAlignment: Text.AlignHCenter
+                        selectionColor: theme.accentPrimary
+                        selectedTextColor: theme.bgPrimary
+                        selectByMouse: true
+                        cursorDelegate: Rectangle { color: theme.accentPrimary; width: 2; radius: 1 }
+                        text: modelConfigPopup.pendingParams["top_k"] !== undefined ? modelConfigPopup.pendingParams["top_k"].toString() : ""
+                        validator: IntValidator { bottom: 0; top: 100 }
+                        inputMethodHints: Qt.ImhDigitsOnly
+                        background: Rectangle {
+                            color: theme.bgTertiary
+                            border.color: !fieldTopK.acceptableInput ? "#FF453A" : fieldTopK.activeFocus ? theme.accentPrimary : theme.borderInactive
+                            border.width: theme.borderWidth
+                            Behavior on border.color { ColorAnimation { duration: theme.animationFast } }
+                        }
+                        onTextEdited: {
+                            if (!acceptableInput) return
+                            var m = Object.assign({}, modelConfigPopup.pendingParams)
+                            m["top_k"] = parseInt(text)
+                            modelConfigPopup.pendingParams = m
+                        }
+                        onEditingFinished: {
+                            if (acceptableInput) {
+                                var m = Object.assign({}, modelConfigPopup.pendingParams)
+                                m["top_k"] = parseInt(text)
+                                modelConfigPopup.pendingParams = m
+                            }
+                        }
+                    }
+                    Button {
+                        id: topKIncBtn
+                        width: 26; height: 32; text: ">"
+                        font.pixelSize: theme.fontMicro; font.family: "Poppins"
+                        onClicked: {
+                            var v = Math.min(100, (parseInt(fieldTopK.text) || 0) + 1)
+                            fieldTopK.text = v.toString()
+                            var m = Object.assign({}, modelConfigPopup.pendingParams)
+                            m["top_k"] = v
+                            modelConfigPopup.pendingParams = m
+                        }
+                        background: Rectangle { color: topKIncBtn.pressed ? theme.accentPrimary : topKIncBtn.hovered ? theme.bgSecondary : theme.bgTertiary; radius: theme.smallRadius; border.color: theme.borderInactive; border.width: theme.borderWidth }
+                        contentItem: Text { text: topKIncBtn.text; font: topKIncBtn.font; color: theme.textSecondary; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                    }
+                }
+            }
+
+            // Top-P row
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 10
+                Text {
+                    text: "Top P (0.0-1.0):"
+                    color: theme.textSecondary; font.pixelSize: theme.fontMicro; font.family: "Poppins"
+                    Layout.preferredWidth: 180
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 0
+                    Button {
+                        id: topPDecBtn
+                        width: 26; height: 32; text: "<"
+                        font.pixelSize: theme.fontMicro; font.family: "Poppins"
+                        onClicked: {
+                            var v = Math.round((parseFloat(fieldTopP.text || "0") - 0.1) * 10) / 10
+                            v = Math.max(0.0, Math.min(1.0, v))
+                            fieldTopP.text = v.toFixed(1)
+                            fieldTopP.fieldValid = true
+                            var m = Object.assign({}, modelConfigPopup.pendingParams)
+                            m["top_p"] = v
+                            modelConfigPopup.pendingParams = m
+                        }
+                        background: Rectangle { color: topPDecBtn.pressed ? theme.accentPrimary : topPDecBtn.hovered ? theme.bgSecondary : theme.bgTertiary; radius: theme.smallRadius; border.color: theme.borderInactive; border.width: theme.borderWidth }
+                        contentItem: Text { text: topPDecBtn.text; font: topPDecBtn.font; color: theme.textSecondary; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                    }
+                    TextField {
+                        id: fieldTopP
+                        Layout.fillWidth: true; height: 32
+                        color: theme.textPrimary; font.pixelSize: theme.fontMicro; font.family: "Poppins"
+                        horizontalAlignment: Text.AlignHCenter
+                        selectionColor: theme.accentPrimary
+                        selectedTextColor: theme.bgPrimary
+                        selectByMouse: true
+                        cursorDelegate: Rectangle { color: theme.accentPrimary; width: 2; radius: 1 }
+                        text: modelConfigPopup.pendingParams["top_p"] !== undefined ? modelConfigPopup.pendingParams["top_p"].toString() : ""
+                        validator: RegularExpressionValidator { regularExpression: /^(0(\.\d{0,4})?|\.\d{1,4}|1(\.0{0,4})?)$/ }
+                        inputMethodHints: Qt.ImhFormattedNumbersOnly
+                        property bool fieldValid: true
+                        Timer {
+                            id: topPDebounce; interval: 600; repeat: false
+                            onTriggered: {
+                                fieldTopP.fieldValid = fieldTopP.acceptableInput
+                                if (fieldTopP.acceptableInput) {
+                                    var m = Object.assign({}, modelConfigPopup.pendingParams)
+                                    m["top_p"] = parseFloat(fieldTopP.text)
+                                    modelConfigPopup.pendingParams = m
+                                }
+                            }
+                        }
+                        background: Rectangle {
+                            color: theme.bgTertiary
+                            border.color: !fieldTopP.fieldValid ? "#FF453A" : fieldTopP.activeFocus ? theme.accentPrimary : theme.borderInactive
+                            border.width: theme.borderWidth
+                            Behavior on border.color { ColorAnimation { duration: theme.animationFast } }
+                        }
+                        onTextEdited: topPDebounce.restart()
+                        onEditingFinished: {
+                            topPDebounce.stop()
+                            fieldValid = acceptableInput
+                            if (acceptableInput) {
+                                var m = Object.assign({}, modelConfigPopup.pendingParams)
+                                m["top_p"] = parseFloat(text)
+                                modelConfigPopup.pendingParams = m
+                            }
+                        }
+                    }
+                    Button {
+                        id: topPIncBtn
+                        width: 26; height: 32; text: ">"
+                        font.pixelSize: theme.fontMicro; font.family: "Poppins"
+                        onClicked: {
+                            var v = Math.round((parseFloat(fieldTopP.text || "0") + 0.1) * 10) / 10
+                            v = Math.max(0.0, Math.min(1.0, v))
+                            fieldTopP.text = v.toFixed(1)
+                            fieldTopP.fieldValid = true
+                            var m = Object.assign({}, modelConfigPopup.pendingParams)
+                            m["top_p"] = v
+                            modelConfigPopup.pendingParams = m
+                        }
+                        background: Rectangle { color: topPIncBtn.pressed ? theme.accentPrimary : topPIncBtn.hovered ? theme.bgSecondary : theme.bgTertiary; radius: theme.smallRadius; border.color: theme.borderInactive; border.width: theme.borderWidth }
+                        contentItem: Text { text: topPIncBtn.text; font: topPIncBtn.font; color: theme.textSecondary; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                    }
+                }
             }
 
             Rectangle { Layout.fillWidth: true; height: 1; color: theme.borderInactive }
 
+            // Reset / Apply row
             RowLayout {
                 Layout.fillWidth: true
-                Item { Layout.fillWidth: true }
-                ActionButton {
-                    width: 90; height: 34
+                spacing: 10
+
+                Button {
+                    Layout.fillWidth: true; height: 42
+                    text: "Reset"
+                    font.pixelSize: theme.fontMicro; font.family: "Poppins"; font.bold: true
+                    onClicked: {
+                        tempDebounce.stop()
+                        topPDebounce.stop()
+                        modelConfigPopup.pendingParams = Object.assign({}, mySubmitPrompt.defaultLlmParams)
+                        fieldTemperature.fieldValid = true
+                        fieldTopP.fieldValid = true
+                    }
+                    background: Rectangle {
+                        color: parent.pressed ? "#C0392B" : parent.hovered ? "#E74C3C" : theme.bgSecondary
+                        radius: theme.smallRadius; border.color: "#E74C3C"; border.width: theme.borderWidth
+                        Behavior on color { ColorAnimation { duration: theme.animationFast } }
+                    }
+                    contentItem: Text { text: parent.text; font: parent.font; color: theme.textPrimary; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                }
+
+                Button {
+                    Layout.fillWidth: true; height: 42
                     text: "Apply"
-                    accentColor: theme.accentSecondary
-                    onClicked: modelConfigPopup.close()
+                    font.pixelSize: theme.fontMicro; font.family: "Poppins"; font.bold: true
+                    enabled: modelConfigPopup.allValid
+                    opacity: enabled ? 1.0 : 0.35
+                    onClicked: {
+                        mySubmitPrompt.setLlmParams(modelConfigPopup.pendingParams)
+                        modelConfigPopup.close()
+                    }
+                    background: Rectangle {
+                        color: parent.enabled && parent.pressed ? "#27AE60" : parent.enabled && parent.hovered ? "#2ECC71" : parent.enabled ? theme.bgSecondary : theme.bgTertiary
+                        radius: theme.smallRadius
+                        border.color: parent.enabled ? theme.accentSecondary : theme.borderInactive
+                        border.width: theme.borderWidth
+                        Behavior on color { ColorAnimation { duration: theme.animationFast } }
+                        Behavior on border.color { ColorAnimation { duration: theme.animationFast } }
+                    }
+                    contentItem: Text { text: parent.text; font: parent.font; color: parent.enabled ? theme.textPrimary : theme.textSecondary; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
                 }
             }
         }

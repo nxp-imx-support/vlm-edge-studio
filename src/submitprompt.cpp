@@ -11,8 +11,12 @@
  */
 
 #include "submitprompt.h"
+#include <QFile>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QLoggingCategory>
 #include <QRegularExpression>
+#include <QUrl>
 
 Q_LOGGING_CATEGORY(lcSubmitPrompt, "submit.prompt")
 
@@ -21,9 +25,10 @@ namespace {
      * @brief Remove file:// prefix from path if present
      */
     QString cleanFilePath(const QString& path) {
-        QString cleaned = path;
-        cleaned.replace(QRegularExpression("^file://"), "");
-        return cleaned;
+    // Use QUrl for correct file:// stripping; avoids heavyweight QRegularExpression.
+    if (path.startsWith(QStringLiteral("file://")))
+        return QUrl(path).toLocalFile();
+    return path;
     }
 }
 
@@ -201,6 +206,10 @@ void SubmitPrompt::setCurrentModelIndex(int index) {
     }
 
     Q_EMIT selectedModelIndexChanged();
+
+    // Load llm_params baseline then overlay per-model generation config
+    loadLlmParamsFromConfig(AAFConfig::CONFIG_PATH);
+    loadLlmParamsFromModelConfig(m_availableModels[index].name);
 }
 
 void SubmitPrompt::setLoadModel(bool load) {
@@ -269,6 +278,10 @@ void SubmitPrompt::ejectModel() {
     m_aafConnector->removeModel(selectedModel.name);
     setModelLoaded(false);
     clearOutputDisplay();
+
+    // Reset llm_params to server_config.json baseline after model ejection
+    loadLlmParamsFromConfig(AAFConfig::CONFIG_PATH);
+    qCDebug(lcSubmitPrompt) << "llm_params reset to server_config baseline after eject";
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -331,6 +344,9 @@ void SubmitPrompt::setUserPromptText(const QString& prompt) {
     updatePromptText(prompt);
     clearOutputDisplay();
     setProcessingInference(true);
+
+    // Push current llm_params into the connector before each request
+    m_aafConnector->setLlmParams(m_llmParams);
 
     if (m_activeMediaType == MEDIA_TYPE_IMAGE) {
         qCDebug(lcSubmitPrompt) << "Sending IMAGE analysis request:" << m_imageSourcePath;
@@ -491,6 +507,8 @@ void SubmitPrompt::initializeEndpoint(int endpoint, const QString &group) {
 }
 
 QStringList SubmitPrompt::endpointNames() const { return m_endpointNames; }
+QVariantMap SubmitPrompt::llmParams() const { return m_llmParams; }
+QVariantMap SubmitPrompt::defaultLlmParams() const { return m_defaultLlmParams; }
 
 // ═══════════════════════════════════════════════════════════════
 // Utility Methods
@@ -643,6 +661,11 @@ void SubmitPrompt::downloadNextModel() {
 }
 
 void SubmitPrompt::handleDownloadFinished(int exitCode, QProcess::ExitStatus exitStatus) {
+  // Guard against a stale signal arriving after cancelDownload() advanced the index
+  if (m_currentDownloadIndex >= m_modelsToDownload.size()) {
+    qCWarning(lcSubmitPrompt) << "handleDownloadFinished: index out of range, ignoring";
+    return;
+  }
   const QString &modelId = m_modelsToDownload[m_currentDownloadIndex];
 
   if (exitStatus == QProcess::NormalExit && exitCode == 0) {
@@ -731,12 +754,20 @@ void SubmitPrompt::cancelDownload() {
 
   qCDebug(lcSubmitPrompt) << "Cancelling download...";
 
-  m_downloadProcess->kill();
-  m_downloadProcess->waitForFinished(3000);
+  // Disconnect signals first so the finished handler does not try to advance
+  // the download queue after we reset state below.
+  m_downloadProcess->disconnect();
 
+  // Reset state before killing so any re-entrant signal from kill() is a no-op
   setDownloadStatus("Download cancelled by user");
   setIsDownloadingModels(false);
   setDownloadProgress(0);
+  // Set index past the end to make handleDownloadFinished a safe no-op
+  m_currentDownloadIndex = m_modelsToDownload.size();
+
+  // Kill asynchronously -- do not call waitForFinished on the main/UI thread.
+  // The QProcess parent relationship ensures the OS process is reaped on destruction.
+  m_downloadProcess->kill();
 }
 
 void SubmitPrompt::setIsDownloadingModels(const bool downloading){
@@ -769,6 +800,103 @@ void SubmitPrompt::setHasDownloadError(const bool &error){
   }
   m_hasDownloadError = error;
   Q_EMIT hasDownloadErrorChanged();
+}
+
+// ============================================================================
+// llm_params - runtime configuration
+// ============================================================================
+
+void SubmitPrompt::setLlmParams(const QVariantMap &params) {
+    if (m_llmParams == params) return;
+    m_llmParams = params;
+    Q_EMIT llmParamsChanged();
+    qCDebug(lcSubmitPrompt) << "llm_params updated:"
+        << "generate_max_tokens=" << m_llmParams.value("generate_max_tokens")
+        << "temperature="         << m_llmParams.value("temperature")
+        << "top_k="               << m_llmParams.value("top_k")
+        << "top_p="               << m_llmParams.value("top_p");
+}
+
+void SubmitPrompt::loadLlmParamsFromConfig(const QString &configPath) {
+    QFile file(configPath);
+    if (!file.open(QIODevice::ReadOnly)) {
+        qCWarning(lcSubmitPrompt) << "Cannot open config for llm_params:" << configPath;
+        return;
+    }
+    const QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
+    file.close();
+
+    const QJsonObject llmJson = doc.object().value("llm_params").toObject();
+    if (llmJson.isEmpty()) {
+        qCWarning(lcSubmitPrompt) << "llm_params section not found in" << configPath;
+        return;
+    }
+
+    m_llmParams        = llmJson.toVariantMap();
+    m_defaultLlmParams = m_llmParams;
+    Q_EMIT llmParamsChanged();
+
+    qCDebug(lcSubmitPrompt) << "Loaded llm_params from default config:"
+        << "generate_max_tokens=" << m_llmParams.value("generate_max_tokens")
+        << "temperature="         << m_llmParams.value("temperature")
+        << "top_k="               << m_llmParams.value("top_k")
+        << "top_p="               << m_llmParams.value("top_p");
+}
+
+void SubmitPrompt::loadLlmParamsFromModelConfig(const QString &modelName) {
+    // Try /usr/share/llm/{model_name}/generation_config.json
+    const QString path = QStringLiteral("%1/%2/generation_config.json")
+                             .arg(AAFConfig::MODEL_PATH, modelName);
+
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly)) {
+        qCDebug(lcSubmitPrompt) << "No generation_config.json for" << modelName
+                                << "- keeping server_config.json defaults";
+        return;
+    }
+
+    qCDebug(lcSubmitPrompt) << "Loaded llm_params from" << path << "for model:" << modelName;
+
+    const QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
+    file.close();
+
+    const QJsonObject obj = doc.object();
+    if (obj.isEmpty()) {
+        qCWarning(lcSubmitPrompt) << "Empty generation_config.json for" << modelName;
+        return;
+    }
+
+    // Build a merged map: start from the server_config baseline then overlay
+    // the editable fields if present in generation_config.json.
+    QVariantMap merged = m_defaultLlmParams;
+
+    auto applyInt = [&](const QString &srcKey, const QString &dstKey) {
+        if (obj.contains(srcKey))
+            merged[dstKey] = obj.value(srcKey).toInt();
+    };
+    auto applyDouble = [&](const QString &srcKey, const QString &dstKey) {
+        if (obj.contains(srcKey))
+            merged[dstKey] = obj.value(srcKey).toDouble();
+    };
+
+    // Map generation_config.json field names to internal llm_params keys.
+    // prefer max_new_tokens over max_length if both are present (more specific).
+    applyInt   ("max_length",         "generate_max_tokens");
+    applyInt   ("max_new_tokens",     "generate_max_tokens");
+    applyDouble("temperature",        "temperature");
+    applyInt   ("top_k",              "top_k");
+    applyDouble("top_p",              "top_p");
+    applyDouble("repetition_penalty", "repeat_penalty");
+
+    m_llmParams        = merged;
+    m_defaultLlmParams = merged;
+    Q_EMIT llmParamsChanged();
+
+    qCDebug(lcSubmitPrompt) << "Merged generation_config.json for" << modelName
+        << "generate_max_tokens=" << m_llmParams.value("generate_max_tokens")
+        << "temperature="         << m_llmParams.value("temperature")
+        << "top_k="               << m_llmParams.value("top_k")
+        << "top_p="               << m_llmParams.value("top_p");
 }
 
 void SubmitPrompt::refreshModelsList() {

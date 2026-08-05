@@ -24,6 +24,7 @@
 #include <QJsonDocument>
 #include <QTimer>
 #include <QLoggingCategory>
+#include <QVariantMap>
 
 Q_DECLARE_LOGGING_CATEGORY(lcConnector)
 
@@ -109,6 +110,9 @@ public:
     // Devices
     void requestDevices();
 
+    // Config LLM Params
+    void setLlmParams(const QVariantMap &params);
+
     // Model management
     void loadModelsFromConfig(const QString &configPath);
     void setModelById(const QString &modelId, const int &endpoint);
@@ -181,6 +185,7 @@ private:
     int m_timeout;
     bool m_isConnected;
     bool m_isProcessing;
+    QVariantMap m_llmParams;
 
     // Request tracking
     RequestType m_currentRequestType;
@@ -199,7 +204,6 @@ private:
     QJsonObject createVideoPayload(const QString &prompt, const QString &videoPath) const;
     QJsonObject createImagePayload(const QString &prompt, const QString &imagePath) const;
     void sendRequest(const QJsonObject &payload);
-    void processResponse(const QJsonDocument &doc);
     void setProcessingState(bool processing);
     void setConnectionState(bool connected);
     bool validateModelInstallation(const QString &modelName);
@@ -213,6 +217,7 @@ private:
     QNetworkRequest createModelStatusRequest(const QString &modelName) const;
     void startModelStatusPolling(const QString &modelName);
     void stopModelStatusPolling();
+
 };
 
 #endif

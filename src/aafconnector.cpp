@@ -111,10 +111,13 @@ void AAFConnector::sendVisionPrompt(const QString &prompt, const QString &mediaP
     
     // Create video/image payload and send request
     QJsonObject payload;
-    if(mediaType == "video") {
+    if (mediaType == "video") {
         payload = createVideoPayload(prompt, mediaPath);
     } else if (mediaType == "image") {
         payload = createImagePayload(prompt, mediaPath);
+    } else {
+        Q_EMIT errorOccurred("Unsupported media type: " + mediaType);
+        return;
     }
 
     sendRequest(payload);
@@ -237,9 +240,9 @@ bool AAFConnector::parseServerConfig(const QString &configPath, QList<ModelInfo>
             info.supportsImage = false;
         }
 
-        // Support multimodal only if enabled and has capabilities
+        // Only include models that have vision capabilities
         if (info.type == "qwen_vl_video" || info.type == "qwen_vl_image") {
-			qCDebug(lcConnector) << "Model: " << info.name << " Type:" << info.type;
+            qCDebug(lcConnector) << "Model:" << info.name << "Type:" << info.type;
             models.append(info);
         }
     }
@@ -270,15 +273,6 @@ QString AAFConnector::formatModelName(const QString &modelId) const
     }
 
     return words.join(" ");
-}
-
-void AAFConnector::setModelById(const QString &modelId, const int &endpoint)
-{
-    if (m_currentModelId == modelId) {
-        qCDebug(lcConnector) << "Model already set to:" << modelId;
-        return;
-    }
-    qCDebug(lcConnector) << "Setting model to:" << modelId;
 }
 
 void AAFConnector::handleNetworkReply()
@@ -344,10 +338,8 @@ void AAFConnector::handleNetworkReply()
         qCDebug(lcConnector) << "Stream processing complete";
         if (!fullResponse.isEmpty()) {
             Q_EMIT responseReceived(fullResponse);
-            qCDebug(lcConnector) << "Complete response:" << fullResponse;
         }
 
-        // Always request metrics when reply finishes successfully
         if (streamCompleted || reply->isFinished()) {
             QTimer::singleShot(500, this, [this]() {
                 requestMetrics(m_currentModelId);
@@ -421,8 +413,10 @@ void AAFConnector::requestMetrics(const QString &modelName)
     QNetworkReply *reply = m_networkManager->get(request);
 
     connect(reply, &QNetworkReply::finished, this, &AAFConnector::handleMetricsReply);
+    // errorOccurred: handleMetricsReply already calls deleteLater on the error path,
+    // so connect the error signal back to finished to ensure cleanup via the same handler.
     connect(reply, QOverload<QNetworkReply::NetworkError>::of(&QNetworkReply::errorOccurred),
-            this, &AAFConnector::handleNetworkError);
+            reply, [reply](QNetworkReply::NetworkError) { reply->deleteLater(); });
 }
 
 void AAFConnector::requestDevices() {
@@ -431,6 +425,9 @@ void AAFConnector::requestDevices() {
   QNetworkReply *reply = m_networkManager->get(
       createJsonRequest(QUrl(m_serverUrl + AAFConfig::ENDPOINT_DEVICES)));
   connect(reply, &QNetworkReply::finished, this, &AAFConnector::handleDevicesReply);
+  // Ensure the reply is deleted on network error even if finished is not emitted
+  connect(reply, QOverload<QNetworkReply::NetworkError>::of(&QNetworkReply::errorOccurred),
+          reply, [reply](QNetworkReply::NetworkError) { reply->deleteLater(); });
 }
 
 QNetworkRequest AAFConnector::createMetricsRequest(const QString &modelName) const
@@ -605,11 +602,13 @@ void AAFConnector::handleNetworkError(QNetworkReply::NetworkError error)
 
     QString errorString;
     if (error == QNetworkReply::TimeoutError) {
-        errorString = "Request timeout occurred";
+        errorString = QStringLiteral("Request timeout occurred");
     } else if (error == QNetworkReply::ConnectionRefusedError) {
-        errorString = "Connection refused by server";
+        errorString = QStringLiteral("Connection refused by server");
     } else if (error == QNetworkReply::HostNotFoundError) {
-        errorString = "Host not found";
+        errorString = QStringLiteral("Host not found");
+    } else {
+        errorString = reply->errorString();
     }
     Q_EMIT errorOccurred(errorString);
 }
@@ -648,11 +647,25 @@ QNetworkRequest AAFConnector::createJsonRequest(const QUrl &url) const {
     return request;
 }
 
+void AAFConnector::setLlmParams(const QVariantMap &params) {
+    m_llmParams = params;
+}
+
 QJsonObject AAFConnector::createTextPayload(const QString &prompt) const
 {
     QJsonObject payload;
     payload["model"] = m_currentModelId;
     payload["stream"] = true;
+
+    // Inject user-configurable llm_params into the request payload
+    if (m_llmParams.contains("generate_max_tokens"))
+        payload["max_tokens"] = m_llmParams.value("generate_max_tokens").toInt();
+    if (m_llmParams.contains("temperature"))
+        payload["temperature"] = m_llmParams.value("temperature").toDouble();
+    if (m_llmParams.contains("top_k"))
+        payload["top_k"] = m_llmParams.value("top_k").toInt();
+    if (m_llmParams.contains("top_p"))
+        payload["top_p"] = m_llmParams.value("top_p").toDouble();
 
     QJsonArray messages;
     QJsonObject userMsg;
@@ -661,7 +674,7 @@ QJsonObject AAFConnector::createTextPayload(const QString &prompt) const
     messages.append(userMsg);
 
     payload["messages"] = messages;
-    qCDebug(lcConnector) << "Created text payload with model:" << m_currentModelId;
+    qCDebug(lcConnector) << "Create request for model:" << m_currentModelId << " payload: " << payload;
 
     return payload;
 }
@@ -671,6 +684,16 @@ QJsonObject AAFConnector::createVideoPayload(const QString &prompt, const QStrin
     QJsonObject payload;
     payload["model"] = m_currentModelId;
     payload["stream"] = true;
+
+    // Inject user-configurable llm_params into the request payload
+    if (m_llmParams.contains("generate_max_tokens"))
+        payload["max_tokens"] = m_llmParams.value("generate_max_tokens").toInt();
+    if (m_llmParams.contains("temperature"))
+        payload["temperature"] = m_llmParams.value("temperature").toDouble();
+    if (m_llmParams.contains("top_k"))
+        payload["top_k"] = m_llmParams.value("top_k").toInt();
+    if (m_llmParams.contains("top_p"))
+        payload["top_p"] = m_llmParams.value("top_p").toDouble();
 
     QJsonArray messages;
     QJsonObject userMsg;
@@ -700,8 +723,7 @@ QJsonObject AAFConnector::createVideoPayload(const QString &prompt, const QStrin
 
     payload["messages"] = messages;
 
-    qCDebug(lcConnector) << "Created video payload with model:" << m_currentModelId;
-
+    qCDebug(lcConnector) << "Created video payload with model:" << m_currentModelId << " payload: " << payload;
     return payload;
 }
 
@@ -710,6 +732,16 @@ QJsonObject AAFConnector::createImagePayload(const QString &prompt, const QStrin
     QJsonObject payload;
     payload["model"] = m_currentModelId;
     payload["stream"] = true;
+
+    // Inject user-configurable llm_params into the request payload
+    if (m_llmParams.contains("generate_max_tokens"))
+        payload["max_tokens"] = m_llmParams.value("generate_max_tokens").toInt();
+    if (m_llmParams.contains("temperature"))
+        payload["temperature"] = m_llmParams.value("temperature").toDouble();
+    if (m_llmParams.contains("top_k"))
+        payload["top_k"] = m_llmParams.value("top_k").toInt();
+    if (m_llmParams.contains("top_p"))
+        payload["top_p"] = m_llmParams.value("top_p").toDouble();
 
     QJsonArray messages;
     QJsonObject userMsg;
@@ -768,33 +800,6 @@ void AAFConnector::sendRequest(const QJsonObject &payload)
 
     setProcessingState(true);
     m_timeoutTimer->start(m_timeout);
-}
-
-void AAFConnector::processResponse(const QJsonDocument &doc)
-{
-    QJsonObject response = doc.object();
-    if (doc.isNull() || response.isEmpty()) {
-        Q_EMIT errorOccurred("Empty response from server");
-        return;
-    }
-
-    qCDebug(lcConnector) << "Processing response:" << doc.toJson(QJsonDocument::Compact);
-
-    // Extract the response text from the API response
-    if (response.contains("choices")) {
-        QJsonArray choices = response["choices"].toArray();
-        if (!choices.isEmpty()) {
-            QJsonObject firstChoice = choices[0].toObject();
-            QJsonObject message = firstChoice["message"].toObject();
-            QString content = message["content"].toString();
-
-            qCDebug(lcConnector) << "Extracted response content:" << content;
-            Q_EMIT responseReceived(content);
-        }
-    } else {
-        qCWarning(lcConnector) << "Unexpected response format:" << doc.toJson();
-        Q_EMIT errorOccurred("Unexpected response format from server");
-    }
 }
 
 void AAFConnector::setProcessingState(bool processing)
@@ -941,10 +946,13 @@ void AAFConnector::handleModelLoadReply()
 
             int statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
             if (statusCode == 201) {
-                // Model already loaded
-                qCDebug(lcConnector) << "Model already loaded";
+                // Model already loaded; use m_loadingModelName because m_currentModelId
+                // is only set after polling confirms ready, not on this fast path.
+                qCDebug(lcConnector) << "Model already loaded:" << m_loadingModelName;
+                const QString loadedName = m_loadingModelName;
+                m_currentModelId = loadedName;
                 stopModelStatusPolling();
-                Q_EMIT modelLoadCompleted(m_currentModelId);
+                Q_EMIT modelLoadCompleted(loadedName);
             } else if (statusCode == 202) {
                 // Model loading initiated
                 qCDebug(lcConnector) << "Model loading in progress";
@@ -1045,12 +1053,11 @@ void AAFConnector::checkModelStatus(const QString &modelName)
 
     connect(reply, &QNetworkReply::finished, this, &AAFConnector::handleModelStatusReply);
     connect(reply, QOverload<QNetworkReply::NetworkError>::of(&QNetworkReply::errorOccurred),
-            this, [this, reply](QNetworkReply::NetworkError error) {
-                // Don't treat 404 as error during polling (model might not exist yet)
+            this, [this](QNetworkReply::NetworkError error) {
+                // Only forward non-404 errors; 404 is normal during model load polling
                 if (error != QNetworkReply::ContentNotFoundError) {
-                    handleNetworkError(error);
+                    Q_EMIT errorOccurred(QStringLiteral("Model status poll error"));
                 }
-                reply->deleteLater();
             });
 }
 
