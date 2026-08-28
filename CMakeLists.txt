@@ -46,9 +46,6 @@ find_package(Qt6 REQUIRED COMPONENTS
 
 qt_standard_project_setup(REQUIRES 6.2)
 
-# Find Python and set up dependencies
-find_package(Python3 REQUIRED COMPONENTS Interpreter Development)
-
 # Verify Qt6 OpenGL support
 if(NOT TARGET Qt6::OpenGL)
     message(FATAL_ERROR "Qt6 OpenGL component is required but not found")
@@ -144,7 +141,6 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
 
 # Target-specific include directories
 target_include_directories(${PROJECT_NAME} PRIVATE
-    ${Python3_INCLUDE_DIRS}
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
@@ -158,7 +154,6 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     Qt6::Network
     PkgConfig::GSTREAMER
     PkgConfig::GST_VIDEO
-    ${Python3_LIBRARIES}
 )
 
 # Conditionally link GStreamer GL if available
