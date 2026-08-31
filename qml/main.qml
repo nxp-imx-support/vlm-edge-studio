@@ -90,6 +90,9 @@ Window {
     property string mediaSource: "none" // "none", "file", "camera"
     // Last loaded media
     property string loadedMediaPath: ""
+    // Per-mode remembered paths so image<->video switching reloads the correct file
+    property string lastImagePath: ""
+    property string lastVideoPath: ""
 
     // Processing state
     property bool isRecording: false
@@ -119,6 +122,7 @@ Window {
 
         // Store current loaded media
         loadedMediaPath = backendPath
+        lastImagePath = backendPath
         console.log("[STATE] Stored loadedMediaPath:", loadedMediaPath)
 
         // Update backend
@@ -147,6 +151,7 @@ Window {
 
         // Set as current loaded media
         loadedMediaPath = backendPath
+        lastVideoPath = backendPath
         console.log("[STATE] Stored loadedMediaPath:", loadedMediaPath)
 
         // Update backend
@@ -338,13 +343,14 @@ Window {
 
     function restoreImageFileMode() {
         console.log("[STATE] Restoring image file mode")
-        // Determine which path to use
+        // Determine which path to use. Use the per-mode image path so a
+        // switch from video mode does not try to load an .mp4 as an image.
         var pathToLoad = ""
 
-        if (loadedMediaPath !== "") {
-            // Use stored path (from previous load or capture)
-            pathToLoad = loadedMediaPath
-            console.log("[STATE] Using stored loadedMediaPath:", pathToLoad)
+        if (lastImagePath !== "") {
+            // Use last known image path (from previous load or capture)
+            pathToLoad = lastImagePath
+            console.log("[STATE] Using stored lastImagePath:", pathToLoad)
         } else if (defaultImagePath !== "") {
             // Fallback to default
             pathToLoad = defaultImagePath
@@ -364,13 +370,14 @@ Window {
     function restoreVideoFileMode() {
         console.log("[STATE] Restoring video file mode")
 
-        // Determine which path to use
+        // Determine which path to use. Use the per-mode video path so a
+        // switch from image mode does not try to load a .jpg as a video.
         var pathToLoad = ""
 
-        if (loadedMediaPath !== "") {
-            // Use stored path (from previous load or record)
-            pathToLoad = loadedMediaPath
-            console.log("[STATE] Using stored loadedMediaPath:", pathToLoad)
+        if (lastVideoPath !== "") {
+            // Use last known video path (from previous load or record)
+            pathToLoad = lastVideoPath
+            console.log("[STATE] Using stored lastVideoPath:", pathToLoad)
         } else if (defaultVideoPath !== "") {
             // Fallback to default
             pathToLoad = defaultVideoPath
@@ -1323,79 +1330,152 @@ Window {
                             anchors.rightMargin: 5
                             spacing: 5
 
-                            // CURRENT MODE PILL (Only when model loaded and mode selected)
+                            // MODE SELECTOR - Segmented Image/Video toggle
                             Rectangle {
                                 id: currentModePill
-                                width: modeText.width + 32
+                                width: modeSegments.implicitWidth + 8
                                 height: 28
                                 radius: 14
+                                color: theme.bgSecondary
+                                border.width: 1
+                                border.color: theme.borderInactive
+
+                                // Both modes available on the loaded model
+                                property bool dualMode: mySubmitPrompt.modelSupportsImage
+                                                        && mySubmitPrompt.modelSupportsVideo
+                                // Reacts to clicks only when a model is loaded and idle
+                                property bool interactive: mySubmitPrompt.isModelLoaded
+                                                           && !mySubmitPrompt.isProcessingInference
 
                                 // Show when model loaded and analysis mode selected
                                 visible: mySubmitPrompt.isModelLoaded
                                         && window.analysisMode !== "none"
 
-                                opacity: visible ? 1.0 : 0.0
+                                opacity: visible ? (interactive ? 1.0 : 0.5) : 0.0
                                 Behavior on opacity {
                                     NumberAnimation {
                                         duration: 300
                                     }
                                 }
 
-                                // Color based on analysis mode
-                                gradient: Gradient {
-                                    orientation: Gradient.Horizontal
-                                    GradientStop {
-                                        position: 0.0
-                                        color: window.analysisMode === "image" ? "#4CAF50" : "#2196F3" // Green for image, blue for video
-                                    }
-                                    GradientStop {
-                                        position: 1.0
-                                        color: window.analysisMode === "image" ? "#66BB6A" : "#42A5F5"
-                                    }
-                                }
-
-                                border.width: 2
-                                border.color: "#FFFFFF"
-
-                                // Pulse animation when processing
-                                SequentialAnimation on border.width {
-                                    running: mySubmitPrompt.isProcessingInference
-                                            && currentModePill.visible
-                                    loops: Animation.Infinite
-                                    NumberAnimation {
-                                        from: 2
-                                        to: 3
-                                        duration: 500
-                                    }
-                                    NumberAnimation {
-                                        from: 3
-                                        to: 2
-                                        duration: 500
-                                    }
-                                }
-
                                 Row {
+                                    id: modeSegments
                                     anchors.centerIn: parent
-                                    spacing: 6
+                                    spacing: 0
 
-                                    Text {
-                                        id: modeText
-                                        text: {
-                                            if (window.analysisMode === "image")
-                                                return "Image Mode"
-                                            if (window.analysisMode === "video")
-                                                return "Video Mode"
-                                            return "Ready"
+                                    // IMAGE segment
+                                    Rectangle {
+                                        id: imageSegment
+                                        visible: mySubmitPrompt.modelSupportsImage
+                                        width: imageRow.implicitWidth + 20
+                                        height: 24
+                                        radius: 12
+                                        color: window.analysisMode === "image" ? "#4CAF50" : "transparent"
+                                        Behavior on color { ColorAnimation { duration: theme.animationFast } }
+
+                                        Row {
+                                            id: imageRow
+                                            anchors.centerIn: parent
+                                            spacing: 5
+                                            Image {
+                                                width: 14; height: 14
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                source: "images/image.svg"
+                                                fillMode: Image.PreserveAspectFit
+                                                smooth: true
+                                                antialiasing: true
+                                            }
+                                            Text {
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                text: "Image"
+                                                color: window.analysisMode === "image" ? "#FFFFFF" : theme.textSecondary
+                                                font.pixelSize: 12
+                                                font.family: "Poppins"
+                                                font.bold: window.analysisMode === "image"
+                                            }
                                         }
-                                        font.pixelSize: 12
-                                        font.family: "Poppins"
-                                        font.bold: true
-                                        color: "#FFFFFF"
+
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            enabled: currentModePill.interactive
+                                                     && mySubmitPrompt.modelSupportsImage
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: {
+                                                console.log("[MODE] Image segment clicked")
+                                                if (window.analysisMode !== "image") {
+                                                    console.log("[MODE] Switching to image mode")
+                                                    // Clear GUI output on every image<->video switch
+                                                    mySubmitPrompt.clearOutputDisplay()
+                                                    restoreImageFileMode()
+                                                } else if (mediaSource === "camera") {
+                                                    restoreImageFileMode()
+                                                }
+                                            }
+                                            ToolTip.visible: containsMouse && currentModePill.dualMode
+                                            ToolTip.text: "Switch to Image mode"
+                                            ToolTip.delay: 500
+                                        }
+                                    }
+
+                                    // VIDEO segment
+                                    Rectangle {
+                                        id: videoSegment
+                                        visible: mySubmitPrompt.modelSupportsVideo
+                                        width: videoRow.implicitWidth + 20
+                                        height: 24
+                                        radius: 12
+                                        color: window.analysisMode === "video" ? "#2196F3" : "transparent"
+                                        Behavior on color { ColorAnimation { duration: theme.animationFast } }
+
+                                        Row {
+                                            id: videoRow
+                                            anchors.centerIn: parent
+                                            spacing: 5
+                                            Image {
+                                                width: 14; height: 14
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                source: "images/video.svg"
+                                                fillMode: Image.PreserveAspectFit
+                                                smooth: true
+                                                antialiasing: true
+                                            }
+                                            Text {
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                text: "Video"
+                                                color: window.analysisMode === "video" ? "#FFFFFF" : theme.textSecondary
+                                                font.pixelSize: 12
+                                                font.family: "Poppins"
+                                                font.bold: window.analysisMode === "video"
+                                            }
+                                        }
+
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            enabled: currentModePill.interactive
+                                                     && mySubmitPrompt.modelSupportsVideo
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: {
+                                                console.log("[MODE] Video segment clicked")
+                                                if (window.analysisMode !== "video") {
+                                                    console.log("[MODE] Switching to video mode")
+                                                    // Clear GUI output on every image<->video switch
+                                                    mySubmitPrompt.clearOutputDisplay()
+                                                    restoreVideoFileMode()
+                                                } else if (mediaSource === "camera") {
+                                                    restoreVideoFileMode()
+                                                }
+                                            }
+                                            ToolTip.visible: containsMouse && currentModePill.dualMode
+                                            ToolTip.text: "Switch to Video mode"
+                                            ToolTip.delay: 500
+                                        }
                                     }
                                 }
                             }
 
-                            // Separator (only when mode pill is visible)
+                            // Separator (only when mode selector is visible)
                             Rectangle {
                                 width: 2
                                 height: 24
@@ -1975,117 +2055,6 @@ Window {
                                     to: 0.0
                                     duration: 150
                                     easing.type: Easing.InQuad
-                                }
-                            }
-                        }
-                    }
-
-                    // IMAGE LOAD
-                    Button {
-                        id: image_button
-                        Layout.fillHeight: true
-                        Layout.fillWidth: true
-                        display: AbstractButton.IconOnly
-                        enabled: mySubmitPrompt.isModelLoaded
-                                && !mySubmitPrompt.isProcessingInference
-                                && window.analysisMode === "image"
-                        opacity: enabled ? 1.0 : 0.3
-                        background: Rectangle { color: "transparent" }
-                        contentItem: Image {
-                            anchors.centerIn: parent
-                            width: parent.width * 0.72
-                            height: parent.width * 0.72
-                            source: "images/image.svg"
-                            fillMode: Image.PreserveAspectFit
-                            smooth: true
-                            antialiasing: true
-                        }
-
-                        onClicked: {
-                            console.log("[BUTTON] Image button clicked")
-                            console.log("[BUTTON] Current mediaSource:", mediaSource)
-                            console.log("[BUTTON] loadedMediaPath:", loadedMediaPath)
-
-                            if (mediaSource === "camera") {
-                                // Switch from camera → restore file mode
-                                console.log("[BUTTON] Switching from camera to image file mode")
-                                restoreImageFileMode()
-                            } else if (mediaSource === "file") {
-                                // Already in file mode → reload
-                                if (loadedMediaPath !== "") {
-                                    console.log("[BUTTON] Reloading current image")
-                                    loadImageFile(loadedMediaPath)
-                                } else {
-                                    console.log("[BUTTON] Opening file dialog")
-                                    fileDialog.nameFilters = ["JPEG Images (*.jpeg *.jpg)"]
-                                    fileDialog.selectedNameFilter.index = 0
-                                    fileDialog.open()
-                                }
-                            } else {
-                                // No mode active → restore or open dialog
-                                if (loadedMediaPath !== "") {
-                                    restoreImageFileMode()
-                                } else {
-                                    fileDialog.nameFilters = ["JPEG Images (*.jpeg *.jpg)"]
-                                    fileDialog.selectedNameFilter.index = 0
-                                    fileDialog.open()
-                                }
-                            }
-                        }
-                    }
-
-                    // VIDEO LOAD
-                    Button {
-                        id: video_button
-                        Layout.fillHeight: true
-                        Layout.fillWidth: true
-                        display: AbstractButton.IconOnly
-                        enabled: mySubmitPrompt.isModelLoaded
-                                && !mySubmitPrompt.isProcessingInference
-                                && window.analysisMode === "video"
-                        opacity: enabled ? 1.0 : 0.3
-                        background: Rectangle { color: "transparent" }
-                        contentItem: Image {
-                            anchors.centerIn: parent
-                            width: parent.width * 0.72
-                            height: parent.width * 0.72
-                            source: "images/video.svg"
-                            fillMode: Image.PreserveAspectFit
-                            smooth: true
-                            antialiasing: true
-                        }
-
-                        onClicked: {
-                            console.log("[BUTTON] Video button clicked")
-                            console.log("[BUTTON] Current mediaSource:", mediaSource)
-                            console.log("[BUTTON] loadedMediaPath:", loadedMediaPath)
-
-                            if (mediaSource === "camera") {
-                                // Switch from camera → restore file mode
-                                console.log("[BUTTON] Switching from camera to video file mode")
-                                restoreVideoFileMode()
-                            } else if (mediaSource === "file") {
-                                // Already in file mode → restart playback
-                                if (loadedMediaPath !== "") {
-                                    console.log("[BUTTON] Already in video file mode")
-                                    if (!video_1.playing) {
-                                        console.log("[BUTTON] Restarting video playback")
-                                        video_1.startPipeline()
-                                    }
-                                } else {
-                                    console.log("[BUTTON] Opening file dialog")
-                                    fileDialog.nameFilters = ["MP4 Videos (*.mp4)"]
-                                    fileDialog.selectedNameFilter.index = 0
-                                    fileDialog.open()
-                                }
-                            } else {
-                                // No mode active → restore or open dialog
-                                if (loadedMediaPath !== "") {
-                                    restoreVideoFileMode()
-                                } else {
-                                    fileDialog.nameFilters = ["MP4 Videos (*.mp4)"]
-                                    fileDialog.selectedNameFilter.index = 0
-                                    fileDialog.open()
                                 }
                             }
                         }

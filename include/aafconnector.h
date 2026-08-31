@@ -25,6 +25,8 @@
 #include <QTimer>
 #include <QLoggingCategory>
 #include <QVariantMap>
+#include <QStringList>
+
 
 Q_DECLARE_LOGGING_CATEGORY(lcConnector)
 
@@ -56,8 +58,10 @@ public:
     struct ModelInfo {
         QString name;           // "nxp/Qwen2_5-VL-7B-Instruct-Ara240"
         QString description;    // "Qwen2.5-VL 7B Istruct instance with vision..."
-        QString type;           // "qwen_vl", "text"
+        QString type;           // Primary/load type: "qwen_vl_image", "qwen_vl_video", "text"
+        QStringList types;      // All supported inference modes (shared instance)
         QString toolCalling;    // "native", "non-native", "no"
+
         int maxPromptSize;      // 2047
         bool enabled;           // true, false
         bool supportsVideo;     // Derived from type

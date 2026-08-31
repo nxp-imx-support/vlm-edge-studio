@@ -220,29 +220,39 @@ bool AAFConnector::parseServerConfig(const QString &configPath, QList<ModelInfo>
         info.name = modelObj["name"].toString();
         info.description = modelObj["description"].toString();
         info.type = modelObj["type"].toString();
+
+        // Read the list of supported inference modes
+        info.types.clear();
+        if (modelObj.contains("types") && modelObj["types"].isArray()) {
+            const QJsonArray typesArr = modelObj["types"].toArray();
+            for (const QJsonValue &t : typesArr) {
+                const QString mode = t.toString();
+                if (!mode.isEmpty()) {
+                    info.types.append(mode);
+                }
+            }
+        } else if (!info.type.isEmpty()) {
+            info.types.append(info.type);
+        }
+
+        // If no primary "type" was provided, default it to the first mode so
+        // the model can still be loaded as a shared instance.
+        if (info.type.isEmpty() && !info.types.isEmpty()) {
+            info.type = info.types.first();
+        }
+
         info.toolCalling = modelObj["tool_calling"].toString();
         info.maxPromptSize = modelObj.value("max_prompt_size").toInt(2048);
         info.enabled = modelObj["enabled"].toBool(false);
 
-        // Determine vision capabilities based on type
-        if (info.type == "qwen_vl_video") {
-            info.supportsVideo = true;
-            info.supportsImage = false;
-        } else if (info.type == "qwen_vl_image") {
-            info.supportsVideo = false;
-            info.supportsImage = true;
-        } else if (info.type == "text") {
-            info.supportsVideo = false;
-            info.supportsImage = false;
-        } else {
-            // Unknown type, assume basic capabilities
-            info.supportsVideo = false;
-            info.supportsImage = false;
-        }
+        // Derive vision capabilities from the full set of advertised modes so a
+        // single shared instance can expose both image and video.
+        info.supportsImage = info.types.contains(QStringLiteral("qwen_vl_image"));
+        info.supportsVideo = info.types.contains(QStringLiteral("qwen_vl_video"));
 
-        // Only include models that have vision capabilities
-        if (info.type == "qwen_vl_video" || info.type == "qwen_vl_image") {
-            qCDebug(lcConnector) << "Model:" << info.name << "Type:" << info.type;
+        // Only include models that advertise at least one vision mode
+        if (info.supportsImage || info.supportsVideo) {
+            qCDebug(lcConnector) << "Model:" << info.name << "Modes:" << info.types;
             models.append(info);
         }
     }
