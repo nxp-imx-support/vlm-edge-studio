@@ -12,6 +12,53 @@ export SERVICE="eiq-aaf-connector.service"
 CONNECTOR_LOG="/tmp/connector.log"
 CONNECTOR_PID_FILE="/tmp/connector.pid"
 
+# ----------------------------------------------------------------------------
+# Sample video assets
+# ----------------------------------------------------------------------------
+# This runs in the background so it never delays app startup.
+VIDEO_ASSETS_DIR="/usr/share/vlm-edge-studio/assets/videos"
+VIDEO_URLS=(
+    "https://cdn.pixabay.com/video/2020/06/18/42479-431756043_large.mp4"
+    "https://cdn.pixabay.com/video/2016/11/15/6387-191695740_large.mp4"
+)
+VIDEO_DESTS=(
+    "video.mp4"
+    "video_1.mp4"
+)
+
+fetch_sample_videos() {
+    [ -d "$VIDEO_ASSETS_DIR" ] || return 0
+    # Always preserve the bundled originals as fallbacks (copy, not move) so the
+    # default video.mp4 remains in place. Only copy if not already preserved.
+    if [ -f "${VIDEO_ASSETS_DIR}/video.mp4" ] && [ ! -f "${VIDEO_ASSETS_DIR}/video_2.mp4" ]; then
+        cp "${VIDEO_ASSETS_DIR}/video.mp4" "${VIDEO_ASSETS_DIR}/video_2.mp4" || true
+    fi
+    if [ -f "${VIDEO_ASSETS_DIR}/video_1.mp4" ] && [ ! -f "${VIDEO_ASSETS_DIR}/video_3.mp4" ]; then
+        cp "${VIDEO_ASSETS_DIR}/video_1.mp4" "${VIDEO_ASSETS_DIR}/video_3.mp4" || true
+    fi
+
+    # Only fetch while video.mp4 still matches its preserved fallback (video_2.mp4).
+    # Once video.mp4 has been replaced by a downloaded clip they will differ, so
+    # this both avoids re-downloading and retries automatically after a failure.
+    if [ -f "${VIDEO_ASSETS_DIR}/video_2.mp4" ] \
+        && cmp -s "${VIDEO_ASSETS_DIR}/video.mp4" "${VIDEO_ASSETS_DIR}/video_2.mp4"; then
+        local i
+        for i in "${!VIDEO_URLS[@]}"; do
+            local dest="${VIDEO_ASSETS_DIR}/${VIDEO_DESTS[$i]}"
+            echo "--- Downloading ${VIDEO_DESTS[$i]} ---"
+            if wget -q -O "${dest}" "${VIDEO_URLS[$i]}"; then
+                echo "--- Done: ${VIDEO_DESTS[$i]} ---"
+            else
+                echo "--- Failed to download ${VIDEO_DESTS[$i]}; keeping bundled fallback ---"
+            fi
+        done
+    fi
+}
+
+
+# Kick off in the background so app startup is never blocked.
+fetch_sample_videos &
+
 # Cleanup function
 cleanup() {
     if [ -f "$CONNECTOR_PID_FILE" ]; then
