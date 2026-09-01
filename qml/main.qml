@@ -1096,9 +1096,14 @@ Window {
                     contentItem: Rectangle {
                         height: progressBarImage.height
                         width: progressBarImage.width * (progressBarImage.value / progressBarImage.to)
-                        color: progressBarImage.value === 0.0 ? "#262626" : "#69CA00"
+                        // Mode-aware fill: green in image mode, blue in video mode
+                        color: progressBarImage.value === 0.0
+                               ? "#262626"
+                               : (window.analysisMode === "video" ? "#2196F3" : "#4CAF50")
                         radius: 4
+                        Behavior on color { ColorAnimation { duration: theme.animationFast } }
                     }
+
                     onVisibleChanged: {
                         progressBarImage.value = 0
                     }
@@ -1660,9 +1665,10 @@ Window {
                                                     var gradient = ctx.createLinearGradient(
                                                                 centerX - radius, centerY,
                                                                 centerX + radius, centerY)
-                                                    gradient.addColorStop(0, "#00FFFFFF")
-                                                    gradient.addColorStop(0.5, "#80FFFFFF")
-                                                    gradient.addColorStop(1, "#FFFFFF")
+                                                    gradient.addColorStop(0, "#000EAFE0")
+                                                    gradient.addColorStop(0.5, "#800EAFE0")
+                                                    gradient.addColorStop(1, "#0EAFE0")
+
 
                                                     ctx.strokeStyle = gradient
                                                     ctx.beginPath()
@@ -1854,13 +1860,11 @@ Window {
                                     }
                                 }
 
-                                ToolTip {
+                                InfoToolTip {
                                     visible: gearButton.hovered
                                     text: "Model loading configuration"
-                                    delay: 500
-                                    font.pixelSize: theme.fontMicro
-                                    font.family: "Poppins"
                                 }
+
                             }
                         }
                     }
@@ -1965,20 +1969,35 @@ Window {
                         Layout.fillHeight: true
                         Layout.fillWidth: true
                         display: AbstractButton.IconOnly
+                        hoverEnabled: true
                         enabled: mySubmitPrompt.isModelLoaded
                                 && !mySubmitPrompt.isProcessingInference
                                 && window.mediaSource !== "camera"
                         opacity: enabled ? 1.0 : 0.3
-                        background: Rectangle { color: "transparent" }
+                        // Unified control-button styling: subtle rounded hover bg
+                        background: Rectangle {
+                            color: load_button.down ? theme.bgSecondary
+                                                     : (load_button.hovered ? theme.bgTertiary : "transparent")
+                            radius: 8
+                            Behavior on color { ColorAnimation { duration: theme.animationFast } }
+                        }
+                        scale: load_button.down ? 0.96 : 1.0
+                        Behavior on scale { NumberAnimation { duration: theme.animationFast } }
                         contentItem: Image {
                             anchors.centerIn: parent
-                            width: parent.width * 0.72
-                            height: parent.width * 0.72
-                            source: load_button.down ? "images/load_pressed.svg" : "images/load_unpressed.svg"
+                            width: parent.width * 0.32
+                            height: parent.width * 0.32
+                            source: "images/open.svg"
+
+                            sourceSize.width: 256
+                            sourceSize.height: 256
                             fillMode: Image.PreserveAspectFit
+                            mipmap: true
                             smooth: true
                             antialiasing: true
                         }
+
+
 
                         onClicked: {
                             // Set file dialog filters based on model capabilities
@@ -1988,13 +2007,18 @@ Window {
                                 return
                             }
                             if (mySubmitPrompt.modelSupportsImage) {
-                                fileDialog.currentFolder = "file:///usr/share/vlm-edge-studio/assets/images"
                                 filters.push("JPEG Images (*.jpeg *.jpg)")
                             }
                             if (mySubmitPrompt.modelSupportsVideo) {
-                                fileDialog.currentFolder = "file:///usr/share/vlm-edge-studio/assets/videos"
                                 filters.push("MP4 Videos (*.mp4)")
                             }
+                            // Browse the folder that matches the active analysis mode
+                            if (window.analysisMode === "video") {
+                                fileDialog.currentFolder = "file:///usr/share/vlm-edge-studio/assets/videos"
+                            } else {
+                                fileDialog.currentFolder = "file:///usr/share/vlm-edge-studio/assets/images"
+                            }
+
                             if (filters.length === 0) {
                                 errorDialog.text = "Current model does not support image or video analysis."
                                 errorDialog.open()
@@ -2013,52 +2037,13 @@ Window {
                                         filters)
                         }
 
-                        ToolTip {
-                            id: loadTooltip
-                            text: "⚠️ Load a model first"
-                            delay: 500
-                            timeout: 5000
-                            visible: load_button.hovered && !mySubmitPrompt.isModelLoaded
-
-                            // Position below button
+                        InfoToolTip {
+                            text: "Load a model first"
                             y: load_button.height + 10
-
-                            contentItem: Text {
-                                text: loadTooltip.text
-                                font.pixelSize: 14
-                                font.family: "Poppins"
-                                color: "#FFFFFF"
-                                padding: 8
-                            }
-
-                            background: Rectangle {
-                                color: "#2C2C2E"
-                                border.color: theme.accentWarning
-                                border.width: 2
-                                radius: 6
-                            }
-
-                            enter: Transition {
-                                NumberAnimation {
-                                    property: "opacity"
-                                    from: 0.0
-                                    to: 1.0
-                                    duration: 200
-                                    easing.type: Easing.OutQuad
-                                }
-                            }
-
-                            exit: Transition {
-                                NumberAnimation {
-                                    property: "opacity"
-                                    from: 1.0
-                                    to: 0.0
-                                    duration: 150
-                                    easing.type: Easing.InQuad
-                                }
-                            }
+                            visible: load_button.hovered && !mySubmitPrompt.isModelLoaded
                         }
                     }
+
 
                     // CAMERA BUTTON - Activates live camera
                     Button {
@@ -2066,24 +2051,39 @@ Window {
                         Layout.fillHeight: true
                         Layout.fillWidth: true
                         display: AbstractButton.IconOnly
+                        hoverEnabled: true
                         enabled: mySubmitPrompt.isModelLoaded
                                 && !mySubmitPrompt.isProcessingInference
                                 && (mySubmitPrompt.modelSupportsImage
                                     || mySubmitPrompt.modelSupportsVideo)
                         opacity: enabled ? 1.0 : 0.3
+                        // Unified control-button styling; accent border when camera active
                         background: Rectangle {
-                            color: mediaSource === "camera" ? "#80000000" : "transparent"
+                            color: mediaSource === "camera" ? "#122400"
+                                   : (camera_button.down ? theme.bgSecondary
+                                      : (camera_button.hovered ? theme.bgTertiary : "transparent"))
                             radius: 8
+                            border.width: mediaSource === "camera" ? 2 : 0
+                            border.color: theme.accentSecondary
+                            Behavior on color { ColorAnimation { duration: theme.animationFast } }
                         }
+                        scale: camera_button.down ? 0.96 : 1.0
+                        Behavior on scale { NumberAnimation { duration: theme.animationFast } }
                         contentItem: Image {
                             anchors.centerIn: parent
-                            width: parent.width * 0.72
-                            height: parent.width * 0.72
+                            width: parent.width * 0.32
+                            height: parent.width * 0.32
                             source: "images/camera.svg"
+
+                            sourceSize.width: 256
+                            sourceSize.height: 256
                             fillMode: Image.PreserveAspectFit
+                            mipmap: true
                             smooth: true
                             antialiasing: true
                         }
+
+
 
                         onClicked: {
                             console.log("[BUTTON] Camera button clicked")
@@ -2101,53 +2101,14 @@ Window {
                             }
                         }
 
-                        ToolTip {
-                            id: cameraTooltip
+                        InfoToolTip {
                             text: "Activate Camera"
-                            delay: 500
-                            timeout: 5000
-                            visible: enabled && camera_button.hovered
-                                    && mySubmitPrompt.isModelLoaded
-
-                            // Position below button
                             y: camera_button.height + 10
-
-                            contentItem: Text {
-                                text: cameraTooltip.text
-                                font.pixelSize: 14
-                                font.family: "Poppins"
-                                color: "#FFFFFF"
-                                padding: 8
-                            }
-
-                            background: Rectangle {
-                                color: "#2C2C2E"
-                                border.color: "#0EAFE0"
-                                border.width: 2
-                                radius: 6
-                            }
-
-                            enter: Transition {
-                                NumberAnimation {
-                                    property: "opacity"
-                                    from: 0.0
-                                    to: 1.0
-                                    duration: 200
-                                    easing.type: Easing.OutQuad
-                                }
-                            }
-
-                            exit: Transition {
-                                NumberAnimation {
-                                    property: "opacity"
-                                    from: 1.0
-                                    to: 0.0
-                                    duration: 150
-                                    easing.type: Easing.InQuad
-                                }
-                            }
+                            visible: camera_button.enabled && camera_button.hovered
+                                    && mySubmitPrompt.isModelLoaded
                         }
                     }
+
 
                     // CAPTURE BUTTON - Context-aware: records video OR captures frame
                     Button {
@@ -2155,6 +2116,7 @@ Window {
                         Layout.fillHeight: true
                         Layout.fillWidth: true
                         display: AbstractButton.IconOnly
+                        hoverEnabled: true
                         // Reuse existing flags - button disabled when any indicator is showing
                         enabled: mySubmitPrompt.isModelLoaded
                                 && window.mediaSource === "camera"
@@ -2162,15 +2124,27 @@ Window {
                                 && !window.showRecordingIndicator
                                 && !window.showProcessingIndicator
                         opacity: enabled ? 1.0 : 0.3
-                        background: Rectangle { color: "transparent" }
+                        background: Rectangle {
+                            color: capture_button.down ? theme.bgSecondary
+                                                        : (capture_button.hovered ? theme.bgTertiary : "transparent")
+                            radius: 8
+                            Behavior on color { ColorAnimation { duration: theme.animationFast } }
+                        }
+                        scale: capture_button.down ? 0.96 : 1.0
+                        Behavior on scale { NumberAnimation { duration: theme.animationFast } }
                         contentItem: Image {
                             anchors.centerIn: parent
-                            width: parent.width * 0.72
-                            height: parent.width * 0.72
-                            source: capture_button.down ? "images/capture_pressed.svg" : "images/capture_unpressed.svg"
+                            width: parent.width * 0.32
+                            height: parent.width * 0.32
+                            source: window.analysisMode === "video" ? "images/capture_video.svg" : "images/capture_image.svg"
+
+                            sourceSize.width: 256
+                            sourceSize.height: 256
                             fillMode: Image.PreserveAspectFit
+                            mipmap: true
                             smooth: true
                             antialiasing: true
+
                         }
 
                         onClicked: {
@@ -2192,53 +2166,14 @@ Window {
                             }
                         }
 
-                        ToolTip {
-                            id: captureTooltip
-                            text: analysisMode === "video" ? "Record video" : "Capture current frame"
-                            delay: 500
-                            timeout: 5000
-                            visible: enabled && capture_button.hovered
-                                    && mySubmitPrompt.isModelLoaded
-
-                            // Position below button
+                        InfoToolTip {
+                            text: window.analysisMode === "video" ? "Record video" : "Capture current frame"
                             y: capture_button.height + 10
-
-                            contentItem: Text {
-                                text: captureTooltip.text
-                                font.pixelSize: 14
-                                font.family: "Poppins"
-                                color: "#FFFFFF"
-                                padding: 8
-                            }
-
-                            background: Rectangle {
-                                color: "#2C2C2E"
-                                border.color: "#69CA00"
-                                border.width: 2
-                                radius: 6
-                            }
-
-                            enter: Transition {
-                                NumberAnimation {
-                                    property: "opacity"
-                                    from: 0.0
-                                    to: 1.0
-                                    duration: 200
-                                    easing.type: Easing.OutQuad
-                                }
-                            }
-
-                            exit: Transition {
-                                NumberAnimation {
-                                    property: "opacity"
-                                    from: 1.0
-                                    to: 0.0
-                                    duration: 150
-                                    easing.type: Easing.InQuad
-                                }
-                            }
+                            visible: capture_button.enabled && capture_button.hovered
+                                    && mySubmitPrompt.isModelLoaded
                         }
                     }
+
                 }
             }
 
@@ -2854,7 +2789,49 @@ Window {
     // ═══════════════════════════════════════════════════════════════
     // REUSABLE COMPONENTS
     // ═══════════════════════════════════════════════════════════════
+    // Minimal, consistent gray tooltip used by all icon buttons
+    component InfoToolTip: ToolTip {
+        id: infoTip
+        delay: 500
+        timeout: 5000
+        font.pixelSize: theme.fontMicro
+        font.family: "Poppins"
+
+        contentItem: Text {
+            text: infoTip.text
+            font: infoTip.font
+            color: theme.textPrimary
+            padding: 2
+        }
+
+        background: Rectangle {
+            color: theme.bgTertiary
+            border.color: theme.borderInactive
+            border.width: 1
+            radius: 6
+        }
+
+        enter: Transition {
+            NumberAnimation {
+                property: "opacity"
+                from: 0.0; to: 1.0
+                duration: theme.animationFast
+                easing.type: Easing.OutQuad
+            }
+        }
+
+        exit: Transition {
+            NumberAnimation {
+                property: "opacity"
+                from: 1.0; to: 0.0
+                duration: 150
+                easing.type: Easing.InQuad
+            }
+        }
+    }
+
     component ActionButton: Button {
+
         id: actionBtn
         property color accentColor: theme.accentPrimary
         font.pixelSize: theme.fontMicro

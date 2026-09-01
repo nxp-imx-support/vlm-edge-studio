@@ -331,10 +331,16 @@ void GstTestGLSink::stopRecording() {
     qCDebug(lcGstGL) << "Recording stopped - captured " << m_recordedFrames << " frames";
     qCDebug(lcGstGL) << "Start MP4 encoding...";
 
-    // After successfully saving the video
-    QString recordedPath = "/usr/share/vlm-edge-studio/assets/videos/recording.mp4";
+    QString timestamp = QDateTime::currentDateTime().toString("yyyyMMdd_hhmmss");
+    QString videoDir = "/usr/share/vlm-edge-studio/assets/videos";
+    QDir vdir;
+    if (!vdir.exists(videoDir)) {
+        vdir.mkpath(videoDir);
+    }
+    QString recordedPath = QString("%1/capture_%2.mp4").arg(videoDir, timestamp);
     m_recordedVideoPath = recordedPath;
     Q_EMIT recordingFinished(recordedPath);
+
 
     // Start background encoding
     auto future = QtConcurrent::run([this]() {
@@ -354,10 +360,11 @@ void GstTestGLSink::switchToPlaybackMode() {
     // Restart pipeline for video playback
     if (playing()) {
         stopPipeline();
-        // Set video source to the recorded file
-        setVideoSource("/usr/share/vlm-edge-studio/assets/videos/recording.mp4");
+        // Set video source to the recorded file (timestamped path from stopRecording)
+        setVideoSource(m_recordedVideoPath);
         startPipeline();
     }
+
 
     Q_EMIT cameraStreamChanged();
     Q_EMIT videoModeActivated();
@@ -401,8 +408,13 @@ void GstTestGLSink::encodeFramesToMP4() {
     rawFile.close();
     m_recordedFrameBuffer.clear();
 
-    // Direct Raw → MP4 using system command
-    QString finalMp4File = "/usr/share/vlm-edge-studio/assets/videos/recording.mp4";
+    // Direct Raw -> MP4 using system command.
+    // Encode to the timestamped path chosen in stopRecording so recordings are
+    // preserved and the playback source matches.
+    QString finalMp4File = m_recordedVideoPath.isEmpty()
+        ? QString("/usr/share/vlm-edge-studio/assets/videos/recording.mp4")
+        : m_recordedVideoPath;
+
     QString mp4Command = QString(
         "gst-launch-1.0 -e filesrc location=%1 "
         "! rawvideoparse width=640 height=480 framerate=30/1 format=rgba "
