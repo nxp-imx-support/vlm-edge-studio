@@ -5,7 +5,6 @@
  * Example Qt Application for GStreamer pipelines rendered through OpenGL ES
  *
  */
-
 #include <QtQml/qqmlextensionplugin.h>
 #include <gst/gst.h>
 
@@ -27,7 +26,6 @@
 #include "gstqmlglsink.h"
 #include "gsttestglsink.h"
 #include "submitprompt.h"
-
 // Enable Qt logging categories for debugging
 Q_LOGGING_CATEGORY(lcMain, "main")
 Q_LOGGING_CATEGORY(lcOpenGL, "opengl")
@@ -233,7 +231,7 @@ int main(int argc, char *argv[]) {
 
   // Set application properties
   app.setApplicationName("VLM Edge Studio");
-  app.setApplicationVersion("1.0.1");
+  app.setApplicationVersion("1.2.0");
   app.setOrganizationName("NXP Semiconductors");
   app.setOrganizationDomain("nxp.com");
 

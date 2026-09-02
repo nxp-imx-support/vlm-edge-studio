@@ -172,7 +172,6 @@ void AAFConnector::loadModelsFromConfig(const QString &configPath)
         Q_EMIT modelsListError("Failed to parse server configuration file");
     }
 }
-
 bool AAFConnector::parseServerConfig(const QString &configPath, QList<ModelInfo> &models)
 {
     QFile configFile(configPath);
@@ -206,9 +205,7 @@ bool AAFConnector::parseServerConfig(const QString &configPath, QList<ModelInfo>
         qCWarning(lcConnector) << "Config missing 'available_models' array";
         return false;
     }
-
     QJsonArray modelsArray = rootObj["available_models"].toArray();
-
     for (const QJsonValue &value : modelsArray) {
         if (!value.isObject()) {
             continue;
@@ -220,6 +217,9 @@ bool AAFConnector::parseServerConfig(const QString &configPath, QList<ModelInfo>
         info.name = modelObj["name"].toString();
         info.description = modelObj["description"].toString();
         info.type = modelObj["type"].toString();
+        info.toolCalling = modelObj["tool_calling"].toString();
+        info.maxPromptSize = modelObj.value("max_prompt_size").toInt(2048);
+        info.enabled = modelObj["enabled"].toBool(false);
 
         // Read the list of supported inference modes
         info.types.clear();
@@ -231,35 +231,69 @@ bool AAFConnector::parseServerConfig(const QString &configPath, QList<ModelInfo>
                     info.types.append(mode);
                 }
             }
-        } else if (!info.type.isEmpty()) {
-            info.types.append(info.type);
         }
 
-        // If no primary "type" was provided, default it to the first mode so
-        // the model can still be loaded as a shared instance.
-        if (info.type.isEmpty() && !info.types.isEmpty()) {
-            info.type = info.types.first();
+        // Derive capabilities from types array OR type field
+        if (!info.types.isEmpty()) {
+            // Priority 1: Use explicit types array
+            info.supportsImage = info.types.contains(QStringLiteral("qwen_vl_image"));
+            info.supportsVideo = info.types.contains(QStringLiteral("qwen_vl_video"));
+        } else {
+            // Priority 2: Fallback to type field
+            if (info.type == QStringLiteral("qwen_vl_multimodal")) {
+                info.supportsImage = true;
+                info.supportsVideo = true;
+                info.types << QStringLiteral("qwen_vl_image")
+                          << QStringLiteral("qwen_vl_video");
+            } else if (info.type == QStringLiteral("qwen_vl_image")) {
+                info.supportsImage = true;
+                info.supportsVideo = false;
+                info.types << QStringLiteral("qwen_vl_image");
+            } else if (info.type == QStringLiteral("qwen_vl_video")) {
+                info.supportsImage = false;
+                info.supportsVideo = true;
+                info.types << QStringLiteral("qwen_vl_video");
+            } else {
+                // Default: video only for unknown types
+                info.supportsImage = false;
+                info.supportsVideo = true;
+                info.types << QStringLiteral("qwen_vl_video");
+                qCDebug(lcConnector) << "Unknown type" << info.type
+                                      << "defaulting to video-only mode";
+            }
         }
 
-        info.toolCalling = modelObj["tool_calling"].toString();
-        info.maxPromptSize = modelObj.value("max_prompt_size").toInt(2048);
-        info.enabled = modelObj["enabled"].toBool(false);
+        // Create unique display name by appending mode
+        QString displaySuffix;
+        if (info.type == QStringLiteral("qwen_vl_image")) {
+            displaySuffix = " (Image)";
+            info.supportsImage = true;
+            info.supportsVideo = false;
+        } else if (info.type == QStringLiteral("qwen_vl_video")) {
+            displaySuffix = " (Video)";
+            info.supportsImage = false;
+            info.supportsVideo = true;
+        } else if (info.type == QStringLiteral("qwen_vl_multimodal")) {
+            displaySuffix = " (Multimodal)";
+            info.supportsImage = true;
+            info.supportsVideo = true;
+        }
 
-        // Derive vision capabilities from the full set of advertised modes so a
-        // single shared instance can expose both image and video.
-        info.supportsImage = info.types.contains(QStringLiteral("qwen_vl_image"));
-        info.supportsVideo = info.types.contains(QStringLiteral("qwen_vl_video"));
+        // Store original name for directory lookup, but modify description for UI
+        info.description = info.description + displaySuffix;
 
         // Only include models that advertise at least one vision mode
         if (info.supportsImage || info.supportsVideo) {
-            qCDebug(lcConnector) << "Model:" << info.name << "Modes:" << info.types;
+            qCDebug(lcConnector) << "Model:" << info.name
+                                  << "Type:" << info.type
+                                  << "Display:" << info.description
+                                  << "Image:" << info.supportsImage
+                                  << "Video:" << info.supportsVideo;
             models.append(info);
         }
     }
-
     return true;
 }
-
 QString AAFConnector::formatModelName(const QString &modelId) const
 {
     // Convert model name to friendly display name
@@ -866,7 +900,6 @@ bool AAFConnector::validateModelInstallation(const QString &modelName)
         return false;
     }
 }
-
 void AAFConnector::loadModel(const ModelInfo &modelInfo, const int &endpoint)
 {
     if (modelInfo.name.isEmpty()) {
@@ -904,8 +937,6 @@ void AAFConnector::loadModel(const ModelInfo &modelInfo, const int &endpoint)
             this, &AAFConnector::handleNetworkError);
 
     Q_EMIT modelLoadStarted(modelInfo.name);
-
-     // Start polling for model status
     startModelStatusPolling(modelInfo.name);
 }
 
