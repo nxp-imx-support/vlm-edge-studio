@@ -147,7 +147,7 @@ warning() {
 # ============================================================================
 
 readonly PACKAGE_NAME="vlm-edge-studio"
-readonly PACKAGE_VERSION="1.0.0"
+readonly PACKAGE_VERSION="1.2.0"
 readonly DEMO_EXEC="run_vlm_edge_studio"
 readonly INSTALL_PATH="/usr/share/vlm-edge-studio/scripts"
 readonly DEMO_PATH="$INSTALL_PATH/$DEMO_EXEC"

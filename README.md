@@ -15,59 +15,27 @@
 
 ## 🔎 Overview
 
-Introducing **VLM Edge Studio**: the NXP launcher designed for supported _Visual Language Models_ (VLMs) accelerated by the Ara240 DNPU at the edge. This application, compatible with FRDM i.MX 95 and FRDM i.MX 8M Plus, enables rapid interaction with locally running VLMs. It uses the eIQ AAF Connector to communicate with the Ara240 Runtime SDK and provides a user-friendly GUI for model selection and prompt input.
+Experience real-time video analysis at the edge with **Ara240**, powered by NXP’s **VLM Edge Studio**. This solution delivers instant, text-based descriptions of live video feeds driven by advanced vision-language intelligence. By running *Video Language Models* (VLMs) locally on the NXP **Ara240** *Discrete Neural Processing Unit* (DNPU) it interprets visual events as they happen, ensuring high-performance, low-latency scene understanding without relying on the cloud.
+Designed to showcase the performance, scalability, and responsiveness of the **Ara240** architecture, this application demonstrates the power of localized intelligence by executing advanced AI workloads directly at the edge. By leveraging the **Ara240** compute capabilities for high-performance, on-device inference, the system eliminates cloud dependency and drastically reduces latency. The result is real-time, autonomous decision-making engineered for next-generation smart cameras, industrial automation, and intelligent edge ecosystems.  
 
-```mermaid
-graph LR
-    subgraph FRDM_iMX["**FRDM i.MX Platform (Host)**"]
-        subgraph VLM_Studio["**VLM Edge Studio**"]
-            UI["GUI<br/>Model Selector & Prompt Input"]
-            Client["eIQ AAF Connector<br/>(HTTP Client)"]
-        end
+ <div align="center">
+    <br></br>
+   <figure>
+     <img src="./data/vlm-edge-studio-preview.webp" altn>
+   </figure>
+ </div>
+ <div align="center">
+   <em> Preview 1. Demonstration of VLM Edge Studio providing a detailed description of a video scene using Qwen2.5 Video 7B Instruct model. </em>
+   <br></br>
+</div>
 
-        subgraph AAF_Server["**eIQ AAF Connector**"]
-            API["REST API Server"]
-            Optimum["Optimum Ara"]
-        end
-        subgraph proxy["**Ara240 Runtime SDK**"]
-            LB["Proxy"]
-        end
-    end
+##  📋 Features
 
-    subgraph Accelerator["**Ara240 DNPU**"]
-        Model["Loaded VLM<br/>(model.dvm)"]
-    end
+Introducing **VLM Edge Studio**: the NXP launcher designed for interaction with compatible *Visual Language Models* (VLMs) accelerated by the **Ara240** DNPU at the edge. This application, compatible with **FRDM i.MX 95** and **FRDM i.MX 8M Plus**, enables rapid interaction with locally running VLMs. It uses the eIQ AAF Connector to communicate with the **Ara240** Runtime SDK and provides a user-friendly GUI for model selection and prompt input.
 
-    %% Application Layer Connections
-    UI <--> Client
-    Client -->|HTTP POST/GET| API
+## Software Architecture
 
-    %% Server Layer Connections
-    API -->|SSE Stream| Client
-    API -->|Prompt| Optimum
-    Optimum <-->|socket| proxy
-
-    %% Hardware Communication
-    proxy <-->|PCIe / USB| Model
-
-    %% Response Flow
-    Optimum -.->|Streaming Tokens| API
-
-    linkStyle default stroke: #FF7400, stroke-width: 2px;
-
-    style FRDM_iMX fill:#EBE7DD,stroke:#262626,color:#262626
-    style Accelerator fill:#EBE7DD,stroke:#262626,color:#262626
-    style VLM_Studio fill:#HEX #262626,stroke:#000000,color:#F7F5F1
-    style AAF_Server fill:#HEX #262626,stroke:#000000,color:#F7F5F1
-    style proxy fill:#HEX #262626,stroke:#000000,color:#F7F5F1
-
-    style UI fill:#F9B500,stroke:#262626,color:#262626
-    style Client fill:#69CA00,stroke:#262626,color:#262626
-    style API fill:#69CA00,stroke:#262626,color:#262626
-    style Optimum fill:#0EAFE0,stroke:#262626,color:#262626
-    style Model fill:#FFD800,stroke:#262626,color:#262626
-    style LB fill:#F7F5F1,stroke:#262626,color:#262626
-```
+![block-diagram](./data/vlm-edge-studio-diagram.svg)
 
 ## 💻 Supported Platforms
 
@@ -104,7 +72,8 @@ graph LR
 
 | **Model**           | **Params (billion)** | **TTFT (s)** | **Avg. Token rate (Tokens/seconds)** | **Model Card**                                                                            | **License**                                                                             |
 | ------------------- | -------------------- | ------------ | ------- | ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| Qwen2.5-VL-7B  | 7B                 | 1 - 14.26         | 6.255     | [nxp/Qwen2.5-VL-7B-Instruct-Ara240](https://huggingface.co/nxp/Qwen2.5-VL-7B-Instruct-Ara240) | [Apache-2.0](https://huggingface.co/nxp/Qwen2.5-VL-7B-Instruct-Ara240/blob/main/LICENSE) |
+| Qwen2.5-VL-7B (Video)  | 7B                | 22.85        | 5.6     | [nxp/Qwen2.5-VL-7B-Instruct-Ara240](https://huggingface.co/nxp/Qwen2.5-VL-7B-Instruct-Ara240) | [Apache-2.0](https://huggingface.co/nxp/Qwen2.5-VL-7B-Instruct-Ara240/blob/main/LICENSE) |
+| Qwen2.5-VL-7B (Image)  | 7B                | 4.36         | 5.8     | [nxp/Qwen2.5-VL-7B-Instruct-Ara240](https://huggingface.co/nxp/Qwen2.5-VL-7B-Instruct-Ara240) | [Apache-2.0](https://huggingface.co/nxp/Qwen2.5-VL-7B-Instruct-Ara240/blob/main/LICENSE) |
 
 > **Note:**\
 > **TTFT:** - Time to first token (TTFT). Reported as a range: the lower bound corresponds to prompts up to 128 tokens, and the upper bound reflects prompts at maximum context length.\
@@ -153,10 +122,10 @@ graph LR
 
     > **NOTE:** Make sure Ara240's runtime service is up and running. You can check with this command: `systemctl status rt-sdk-ara2.service --no-pager -l`
 
-2. Once the launcher is showed on screen, click on the `LOAD` button. The model will start loading; once ready, you can type a prompt and click Submit.
+2. Once the launcher is showed on screen.
 
 <center>
-<br><img src="./data/vlm-edge-studio-video.png" width=720>
+<br><img src="./data/main-ui.png" width=720>
 <br><i>Figure 1. VLM Edge Studio.</i>
 </center>
 
@@ -165,12 +134,12 @@ graph LR
 VLM generation parameters can be adjusted at any time without reloading the model. Click the **gear icon (⚙)** in the model selector bar to open the **Model Configuration** popup.
 
 <center>
-<br><img src="./data/model_gear_conf.png" width=720>
+<br><img src="./data/model-conf.png" width=720>
 <br><i>Figure 2. Gear button used to open the Model Configuration popup.</i>
 </center>
 
 <center>
-<br><img src="./data/model_conf.png" width=720>
+<br><img src="./data/model-conf-dialog.png" width=318>
 <br><i>Figure 3. Model Configuration popup with stepper controls.</i>
 </center>
 
@@ -190,7 +159,51 @@ VLM generation parameters can be adjusted at any time without reloading the mode
 - **Apply** — commits the current values to the backend. The button is disabled until all four fields contain valid values. Changes will take effect on the next prompt submission.
 
 
+## 🖼️ Image & Video Analysis Modes
+
+VLM Edge Studio supports two analysis modes, driven by the capabilities of the loaded model.
+
+The active mode is color-coded throughout the UI for quick visual feedback:
+
+- **Image mode** — green (`#4CAF50`)
+- **Video mode** — blue (`#2196F3`)
+
+The media loading progress bar adopts the active mode color, and the **Capture** button icon is mode-aware (a shutter/aperture icon for image capture, a red record dot for video recording).
+
+With Qwen2.5-VL-7B loaded, the model can analyze both still images and video clips, responding to prompts about the captured or loaded media.
+
+<center>
+<br><img src="./data/image-mode.png" width=720>
+<br><i>Figure 4. Image analysis mode (Qwen2.5-VL-7B).</i>
+</center>
+
+<center>
+<br><img src="./data/video-mode.png" width=720>
+<br><i>Figure 5. Video analysis mode (Qwen2.5-VL-7B).</i>
+</center>
+
+### Media input sources
+
+Each mode accepts media from two sources:
+
+1. **File** — click the **Open** button to browse for media. The file dialog opens the folder that matches the active mode:
+   - Image mode: `/usr/share/vlm-edge-studio/assets/images` (`*.jpg`, `*.jpeg`)
+   - Video mode: `/usr/share/vlm-edge-studio/assets/videos` (`*.mp4`)
+2. **Camera** — click the **Camera** button to start the live USB camera stream, then use the **Capture** button:
+   - In image mode, Capture grabs the current frame as a still image.
+   - In video mode, Capture records a short clip.
+
+### Captured media naming
+
+Camera captures are written to the mode's asset folder with a consistent, timestamped name so recordings are preserved and never overwritten:
+
+- Image frames: `capture_<YYYYMMDD_hhmmss>.jpg`
+- Video recordings: `capture_<YYYYMMDD_hhmmss>.mp4`
+
+> **NOTE:** Switching between Image and Video mode clears the current output and reloads the last media used for that mode (falling back to the default asset if none was loaded). It does not reload the model.
+
 ## Limitations
+
 
 A single instance of the program **cannot run multiple models simultaneously across different endpoints**. Model selection is limited to one per instance, regardless of the number of endpoints available.
 
