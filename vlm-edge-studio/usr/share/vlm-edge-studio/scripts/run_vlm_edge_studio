@@ -65,6 +65,9 @@ cleanup() {
         kill $(cat "$CONNECTOR_PID_FILE") 2>/dev/null || true
         rm -f "$CONNECTOR_PID_FILE"
     fi
+    
+    # Restart systemd service for other demos
+    systemctl start eiq-aaf-connector.service 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
 
